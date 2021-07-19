@@ -1,0 +1,22 @@
+{
+  "name": "tsos",
+  "version": "1.0.0",
+  "description": "",
+  "dependencies": {
+    "http-server": "^0.12.3",
+    "ts-loader": "^9.2.3",
+    "typescript": "^4.3.5",
+    "webpack": "^5.45.1",
+    "webpack-cli": "^4.7.2"
+  },
+  "scripts": {
+    "dev": "webpack --mode development",
+    "build": "tsc --project tsconfig.sys.json && tsc --project tsconfig.bin.json",
+    "watch-sys": "tsc --watch --project tsconfig.sys.json",
+    "watch-bin": "tsc --watch --project tsconfig.bin.json",
+    "server": "http-server dist"
+  },
+  "devDependencies": {
+    "webpack-dev-server": "^3.11.2"
+  }
+}

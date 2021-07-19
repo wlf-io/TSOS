@@ -1,0 +1,10 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "module": "AMD",
+        "outFile": "./dist/system.js"
+    },
+    "files": [
+        "src/system/root.ts"
+    ]
+}
