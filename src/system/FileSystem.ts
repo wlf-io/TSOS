@@ -18,18 +18,36 @@ export enum FSPerm {
 }
 
 export class FSAccess {
-    private owner: string = "root";
-    private group: string = "root";
+    private owner: string;
+    private group: string;
     private perms: { [k: string]: number } = {
         user: 0,
         group: 0,
         other: 0,
     };
-    constructor(perm: string) {
+    constructor(perm: string, owner: string, group: string) {
         if (perm.length < 3 || perm.length > 4) throw "perm must be in 777 or 0777 format";
         this.perms.other = parseInt(perm.substr(perm.length - 1, 1));
         this.perms.group = parseInt(perm.substr(perm.length - 2, 1));
         this.perms.user = parseInt(perm.substr(perm.length - 3, 1));
+        this.owner = owner;
+        this.group = group;
+    }
+
+    public get permString(): string {
+        return `0${this.perms.user}${this.perms.group}${this.perms.other}`;
+    }
+
+    public static fromAccessString(str: string): FSAccess {
+        const parts = str.split(":");
+        if (parts.length == 3) {
+            return new FSAccess(parts[2], parts[0], parts[1]);
+        }
+        throw "Invalid Access String";
+    }
+
+    public toString(): string {
+        return `${this.owner}:${this.group}:${this.permString}`;
     }
 
     private getUserLevel(user: UserIdent): "user" | "group" | "other" {
@@ -40,6 +58,14 @@ export class FSAccess {
 
     public userCanRead(user: UserIdent): boolean {
         return this.userHasPerm(user, FSPerm.read);
+    }
+
+    public userCanWrite(user: UserIdent): boolean {
+        return this.userHasPerm(user, FSPerm.write);
+    }
+
+    public userCanExecute(user: UserIdent): boolean {
+        return this.userHasPerm(user, FSPerm.execute);
     }
 
     private userHasPerm(user: UserIdent, perm: FSPerm): boolean {
@@ -104,12 +130,12 @@ export class FileSystemHandle implements iFileSystem {
 
     public mkdir(name: string) {
         this.createCheck(name);
-        this.fs.mkdir(name);
+        this.fs.mkdir(name, this.user.name);
     }
 
     public touch(name: string) {
         this.createCheck(name);
-        this.fs.touch(name);
+        this.fs.touch(name, this.user.name);
     }
 
     public read(name: string): string {
@@ -149,20 +175,40 @@ export class FileSystemHandle implements iFileSystem {
         }
     }
 
-    public canRead(_name: string): boolean {
-        return true;
+    public canRead(name: string): boolean {
+        const fname = PathResolver.resolve(name, this.cwd, this.user.name);
+        if (fname === "/") return true;
+        if (!this.exists(fname)) {
+            throw `${fname} does not exist`;
+        }
+        return this.fs.getPerm(fname).userCanRead(this.user);
     }
 
     public canWrite(name: string): boolean {
-        // @ts-ignore
-        const _fname = PathResolver.resolve(name, this.cwd, this.user.name);
-        return true;
+        const fname = PathResolver.resolve(name, this.cwd, this.user.name);
+        if (!this.exists(fname)) {
+            throw `${fname} does not exist`;
+        }
+        return this.fs.getPerm(fname).userCanWrite(this.user);
+    }
+
+    public canExecute(name: string): boolean {
+        const fname = PathResolver.resolve(name, this.cwd, this.user.name);
+        if (fname === "/") return true;
+        if (!this.exists(fname)) {
+            throw `${fname} does not exist`;
+        }
+        return this.fs.getPerm(fname).userCanExecute(this.user);
     }
 
     public exists(name: string): boolean {
         const fname = PathResolver.resolve(name, this.cwd, this.user.name);
-        if (!this.canRead(fname)) {
-            return false;
+        if (fname === "/") return true;
+        const parent = PathResolver.parent(fname);
+        if (parent !== "/") {
+            if (!this.fs.isType(parent, FSType.dir) || !this.fs.getPerm(parent).userCanRead(this.user)) {
+                return false;
+            }
         }
         return this.fs.exists(fname);
     }
@@ -188,14 +234,14 @@ export class FileSystemHandle implements iFileSystem {
 }
 
 class FileSystem {
-    public mkdir(name: string): void {
+    public mkdir(name: string, owner: string, group: string | null = null): void {
         this.setType(name, FSType.dir);
-        this.setPerm(name, "755");
+        this.setPerm(name, "755", owner, group);
     }
 
-    public touch(name: string): void {
+    public touch(name: string, owner: string, group: string | null = null): void {
         this.setType(name, FSType.file);
-        this.setPerm(name, "644");
+        this.setPerm(name, "644", owner, group);
         this.write(name, "");
     }
 
@@ -203,12 +249,9 @@ class FileSystem {
         setItem("FS:T:" + name, type);
     }
 
-    public setOwner(name: string, owner: string): void {
-        setItem("FS:O:" + name, owner);
-    }
-
-    public setPerm(name: string, perm: string): void {
-        setItem("FS:P:" + name, perm);
+    public setPerm(name: string, perm: string, owner: string, group: string | null = null): void {
+        const access = new FSAccess(perm, owner, group || owner)
+        setItem("FS:P:" + name, access.toString());
     }
 
     public isType(name: string, type: FSType): boolean {
@@ -232,6 +275,11 @@ class FileSystem {
         return this.getType(name) != null;
     }
 
+    public getPerm(name: string): FSAccess {
+        const str = localStorage.getItem("FS:P:" + name) || "";
+        return FSAccess.fromAccessString(str);
+    }
+
     public getKeys(prefix: string = ""): string[] {
         return Object.keys(localStorage)
             .filter(key => key.startsWith("FS:T:"))
@@ -246,3 +294,5 @@ enum FSType {
     in = "in",
     out = "out",
 }
+
+(new FileSystem()).mkdir("/", "root", "root");
