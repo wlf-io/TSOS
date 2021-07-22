@@ -1,5 +1,6 @@
 export interface iSystem {
     fileSystem: iFileSystem;
+    user: iUserIdent;
 }
 
 export interface iUserIdent {
@@ -8,17 +9,34 @@ export interface iUserIdent {
 }
 
 export interface iFileSystem {
-    read(name: string): string | null;
-    write(name: string, data: string): void;
-    mkdir(name: string): void;
-    touch(name: string): void;
+    read(path: string): string | null;
+    write(path: string, data: string): void;
+    mkdir(path: string): void;
+    touch(path: string): void;
+    isFile(path: string): boolean;
+    isDir(path: string): boolean;
+    cwd: string;
+    setCwd(path: string): void;
+    resolve(path: string): string;
 }
 
-export interface iProcess {
+export type iOutput = string | string[] | string[][];
+
+export interface IOFeed {
+    hookOut(hook: IOFeed): void;
+    input(input: iOutput): void;
+}
+
+export interface iProcess extends IOFeed {
     pid: number;
+    run(args: string[]): Promise<iOutput>;
+    kill(): void;
+    system: iSystem;
+    fileSystem: iFileSystem;
 }
 
-export interface iProcessInstance {
+export interface iProcessInstance extends IOFeed {
     //new(process: iProcess): iProcessInstance;
-    run(args: string[]): void;
+    run(args: string[]): Promise<iOutput>;
+    kill(): void;
 }

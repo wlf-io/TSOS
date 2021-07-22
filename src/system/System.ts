@@ -1,6 +1,7 @@
 import { UserIdent } from "./UserIdent";
 import { FileSystemHandle, PathResolver } from "./FileSystem";
-import { iProcessInstance, iProcess, iSystem } from "../interfaces/SystemInterfaces";
+import { iProcessInstance, iProcess, iSystem, IOFeed, iOutput } from "../interfaces/SystemInterfaces";
+import Display from "./Display";
 
 
 export class SystemHandle implements iSystem {
@@ -12,6 +13,7 @@ export class SystemHandle implements iSystem {
     constructor(user: UserIdent) {
         this._user = user;
         this.fs = new FileSystemHandle(this.user);
+        this.fs.setCwd("~");
     }
 
     public get user(): UserIdent {
@@ -54,6 +56,16 @@ export class Process implements iProcess {
         //@ts-ignore
         this._instance = new this._binary(this);
     }
+    kill(): void {
+        this.instance.kill();
+    }
+
+    hookOut(hook: IOFeed): void {
+        this.instance.hookOut(hook);
+    }
+    input(input: string | string[] | string[][]): void {
+        this.instance.input(input);
+    }
 
     public get system(): SystemHandle {
         return this._system;
@@ -67,7 +79,7 @@ export class Process implements iProcess {
         return this._pid;
     }
 
-    public get instance(): any {
+    public get instance(): iProcessInstance {
         return this._instance;
     }
 
@@ -79,23 +91,22 @@ export class Process implements iProcess {
         return this.system.fileSystem;
     }
 
-    public run(args: string[]): iProcessInstance {
-        if (this.running) return this._instance;
+    public run(args: string[]): Promise<iOutput> {
+        if (this.running) throw "already running";
         this.running = true;
-        this._instance.run(args);
-        return this._instance;
+        return this.instance.run(args);
     }
 
-    public createProcess(location: string, args: string[]): Process {
+    public createProcess(location: string): Process {
         const bin = this.fileSystem.read(location);
         const proc = System.createProcess(bin, this.system, this);
-        window.setTimeout(() => proc.run(args), 1);
         return proc;
     }
 }
 
 export class System {
     private static processCount: number = 0;
+    private static inputHooks: IOFeed[] = [];
 
     public static createProcess(bin: string, system: SystemHandle, creator: Process | null): Process {
         const next = eval(bin);
@@ -104,30 +115,46 @@ export class System {
     }
 
     public static setup(system: iSystem) {
+        if (!system.fileSystem.isFile("/bin/shell")) {
+            system.fileSystem.touch("/bin/shell");
+        }
         return fetch("/bin/shell.js")
             .then(response => response.text())
             .then(text => {
-                system.fileSystem.mkdir("/bin");
-                system.fileSystem.touch("/bin/shell");
                 system.fileSystem.write("/bin/shell", text);
-                console.log(text);
                 return text;
-            })
-            .catch(e => {
-                console.error("Setup failed", e);
             })
     }
 
     public static boot(): void {
         const root = new UserIdent("root", ["root"]);
         const rootSysHandle = new SystemHandle(root);
+        document.onkeypress = ev => {
+            System.keyInput(ev);
+        };
+        document.onkeydown = ev => {
+            if (ev.key == "Backspace") {
+                System.keyInput(ev);
+                return false;
+            }
+        };
         System.setup(rootSysHandle)
             .then(() => {
                 const shell = rootSysHandle.fileSystem.read("/bin/shell");
                 const guest = new UserIdent("guest", ["guest"]);
                 const guestSysHandle = new SystemHandle(guest);
                 const proc = System.createProcess(shell, guestSysHandle, null);
+                Display.hook(proc);
+                System.hookInput(proc);
                 proc.run(["--motd"]);
             });
+    }
+
+    private static hookInput(input: IOFeed): void {
+        System.inputHooks.push(input);
+    }
+
+    private static keyInput(ev: KeyboardEvent): void {
+        System.inputHooks.forEach(hook => hook.input(ev.key));
     }
 }

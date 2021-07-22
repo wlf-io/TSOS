@@ -82,7 +82,8 @@ export class FSAccess {
     }
 
     private permTest(perm: number, test: FSPerm): boolean {
-        const testPerm: number = parseInt(FSPerm[test]);
+        //@ts-ignore
+        const testPerm: number = parseInt(test);
         return (perm & testPerm) > 0;
     }
 }
@@ -99,7 +100,10 @@ export class PathResolver {
         if ((parts[0] || "") == "~") {
             parts.shift();
             parts.unshift(username);
-            parts.unshift("home");
+            if (username != "root") {
+                parts.unshift("home");
+            }
+            parts.unshift("");
         }
         if (parts[0] != "") {
             cwd.split("/").reverse().forEach(p => parts.unshift(p));
@@ -114,6 +118,49 @@ export class PathResolver {
     }
 }
 
+class FPath {
+    private _path: string;
+    private _parent: FPath | null = null;
+    private cwd: string;
+    private username: string;
+    constructor(path: string, cwd: string, username: string) {
+        this.cwd = cwd;
+        this.username = username;
+        this._path = PathResolver.resolve(path, cwd, username);
+    }
+
+    public get parent(): FPath {
+        if (this._parent === null) {
+            this._parent = new FPath(PathResolver.parent(this.path), this.cwd, this.username);
+        }
+        return this._parent;
+    }
+
+    public get path(): string {
+        return this._path;
+    }
+
+    public get isRoot(): boolean {
+        return this.path === "/";
+    }
+
+    public toString(): string {
+        return this.path;
+    }
+
+    public get parentList(): FPath[] {
+        if (this.isRoot) return [];
+        let parent = this.parent;
+        const parents = [parent];
+        while (!parent.isRoot) {
+            parent = parent.parent;
+            parents.unshift(parent);
+        }
+        return parents;
+    }
+
+}
+
 export class FileSystemHandle implements iFileSystem {
     private _cwd: string = "/";
     private user: UserIdent;
@@ -123,160 +170,194 @@ export class FileSystemHandle implements iFileSystem {
         this.fs = new FileSystem();
     }
 
-    public write(name: string, data: string) {
-        this.writeCheck(name);
-        this.fs.write(name, data);
+    public write(path: string | FPath, data: string) {
+        path = this.ensureFPath(path);
+        // console.log(`${this.user.name} : write : ${path}`);
+        this.writeCheck(path);
+        this.fs.write(path, data);
     }
 
-    public mkdir(name: string) {
-        this.createCheck(name);
-        this.fs.mkdir(name, this.user.name);
+    public mkdir(path: string | FPath) {
+        path = this.ensureFPath(path);
+        // console.log(`${this.user.name} : mkdir : ${path}`);
+        this.createCheck(path);
+        this.fs.mkdir(path, this.user.name);
     }
 
-    public touch(name: string) {
-        this.createCheck(name);
-        this.fs.touch(name, this.user.name);
+    public touch(path: string | FPath) {
+        path = this.ensureFPath(path);
+        // console.log(`${this.user.name} : touch : ${path}`);
+        this.createCheck(path);
+        this.fs.touch(path, this.user.name);
     }
 
-    public read(name: string): string {
-        const fname = PathResolver.resolve(name, this.cwd, this.user.name);
-        this.readCheck(fname);
-        return this.fs.read(fname);
+    public read(path: string | FPath): string {
+        path = this.ensureFPath(path);
+        // console.log(`${this.user.name} : read : ${path}`);
+        this.readCheck(path);
+        return this.fs.read(path);
     }
 
-    public createCheck(fname: string): void {
-        const parent = PathResolver.parent(fname);
-        if (!this.canRead(parent)) {
-            throw `'${parent}' does not exist`;
+    public resolve(path: string): string {
+        console.log("Resolve", path);
+        const p = PathResolver.resolve(path, this.cwd, this.user.name);
+
+        console.log("Resolve", path, p);
+        return p;
+    }
+
+    private createCheck(path: FPath): void {
+        if (!this.canRead(path.parent)) {
+            throw `'${path.parent}' does not exist [CC]`;
         }
-        if (!this.isDir(parent)) {
-            throw `'${parent}' is not a directory`;
+        if (!this.isDir(path.parent)) {
+            throw `'${path.parent}' is not a directory [CC]`;
         }
-        if (!this.canWrite(parent)) {
-            throw parent + " access denied";
+        if (!this.canWrite(path.parent)) {
+            throw `'${path.parent}' access denied [CC]`;
         }
-        if (this.fs.exists(fname)) {
-            throw fname + " already exists";
-        }
-    }
-
-    public writeCheck(fname: string): void {
-        if (!this.fs.exists(fname)) {
-            throw fname + " doesn't exist";
-        }
-        if (!this.canWrite(fname)) {
-            throw fname + " access denied";
+        if (this.fs.exists(path)) {
+            throw `${path} already exists [CC]`;
         }
     }
 
-    private readCheck(fname: string): void {
-        if (!this.canRead(fname)) {
-            throw fname + " access denied";
+    private writeCheck(path: FPath): void {
+        if (!this.fs.exists(path)) {
+            throw `${path} doesn't exist [WC]`;
+        }
+        if (!this.canWrite(path)) {
+            throw `${path} access denied [WC]`;
         }
     }
 
-    public canRead(name: string): boolean {
-        const fname = PathResolver.resolve(name, this.cwd, this.user.name);
-        if (fname === "/") return true;
-        if (!this.exists(fname)) {
-            throw `${fname} does not exist`;
+    private readCheck(path: FPath): void {
+        if (!this.canRead(path)) {
+            throw `${path} access denied [RC]`;
         }
-        return this.fs.getPerm(fname).userCanRead(this.user);
     }
 
-    public canWrite(name: string): boolean {
-        const fname = PathResolver.resolve(name, this.cwd, this.user.name);
-        if (!this.exists(fname)) {
-            throw `${fname} does not exist`;
+    public canRead(path: string | FPath): boolean {
+        path = this.ensureFPath(path);
+        if (path.isRoot) return true;
+        if (!this.exists(path)) {
+            console.log("READ NOT EXIST");
+            return false;
         }
-        return this.fs.getPerm(fname).userCanWrite(this.user);
+        return this.fs.getPerm(path).userCanRead(this.user);
     }
 
-    public canExecute(name: string): boolean {
-        const fname = PathResolver.resolve(name, this.cwd, this.user.name);
-        if (fname === "/") return true;
-        if (!this.exists(fname)) {
-            throw `${fname} does not exist`;
+    public canWrite(path: string | FPath): boolean {
+        path = this.ensureFPath(path);
+        if (!this.exists(path)) {
+            return false
         }
-        return this.fs.getPerm(fname).userCanExecute(this.user);
+        return this.fs.getPerm(path).userCanWrite(this.user);
     }
 
-    public exists(name: string): boolean {
-        const fname = PathResolver.resolve(name, this.cwd, this.user.name);
-        if (fname === "/") return true;
-        const parent = PathResolver.parent(fname);
-        if (parent !== "/") {
-            if (!this.fs.isType(parent, FSType.dir) || !this.fs.getPerm(parent).userCanRead(this.user)) {
-                return false;
-            }
+    public canExecute(path: string | FPath): boolean {
+        path = this.ensureFPath(path);
+        if (path.isRoot) return true;
+        if (!this.exists(path)) {
+            return false
         }
-        return this.fs.exists(fname);
+        return this.fs.getPerm(path).userCanExecute(this.user);
     }
 
-    public isDir(name: string): boolean {
-        const fname = PathResolver.resolve(name, this.cwd, this.user.name);
-        return fname == "/" || this.isType(fname, FSType.dir);
+    public exists(path: string | FPath): boolean {
+        path = this.ensureFPath(path);
+        if (!this.fs.isType(path.parent, FSType.dir)) {
+            console.log("EXISTS PARENT NOT DIR");
+            return false;
+        }
+        const perm = this.fs.getPerm(path.parent);
+        if (!perm.userCanRead(this.user)) {
+            console.log(`EXISTS PARENT NOT PERM ${perm}`);
+            return false;
+        }
+        return this.fs.exists(path);
     }
 
-    public isFile(name: string): boolean {
-        const fname = PathResolver.resolve(name, this.cwd, this.user.name);
-        return this.isType(fname, FSType.file);
+    public isDir(path: string | FPath): boolean {
+        path = this.ensureFPath(path);
+        return this.isType(path, FSType.dir);
     }
 
-    private isType(fname: string, type: FSType): boolean {
-        this.readCheck(fname);
-        return this.fs.getType(fname) == type;
+    private ensureFPath(path: string | FPath): FPath {
+        if (typeof path === "string") path = new FPath(path, this.cwd, this.user.name);
+        return path;
+    }
+
+    public isFile(path: string | FPath): boolean {
+        path = this.ensureFPath(path);
+        return this.isType(path, FSType.file);
+    }
+
+    private isType(path: string | FPath, type: FSType): boolean {
+        path = this.ensureFPath(path);
+        this.readCheck(path);
+        return this.fs.getType(path) == type;
     }
 
     public get cwd(): string {
         return this._cwd;
     }
+
+    public setCwd(path: string | FPath): void {
+        path = this.ensureFPath(path);
+        if (!this.canExecute(path)) {
+            throw `${path} access denied`;
+        }
+        if (!this.isDir(path)) {
+            throw `${path} is not a directory`;
+        }
+        this._cwd = path.path;
+    }
 }
 
 class FileSystem {
-    public mkdir(name: string, owner: string, group: string | null = null): void {
-        this.setType(name, FSType.dir);
-        this.setPerm(name, "755", owner, group);
+    public mkdir(path: FPath, owner: string, group: string | null = null): void {
+        this.setType(path, FSType.dir);
+        this.setPerm(path, "755", owner, group);
     }
 
-    public touch(name: string, owner: string, group: string | null = null): void {
-        this.setType(name, FSType.file);
-        this.setPerm(name, "644", owner, group);
-        this.write(name, "");
+    public touch(path: FPath, owner: string, group: string | null = null): void {
+        this.setType(path, FSType.file);
+        this.setPerm(path, "644", owner, group);
+        this.write(path, "");
     }
 
-    private setType(name: string, type: FSType): void {
-        setItem("FS:T:" + name, type);
+    private setType(path: FPath, type: FSType): void {
+        setItem("FS:T:" + path.path, type);
     }
 
-    public setPerm(name: string, perm: string, owner: string, group: string | null = null): void {
+    public setPerm(path: FPath, perm: string, owner: string, group: string | null = null): void {
         const access = new FSAccess(perm, owner, group || owner)
-        setItem("FS:P:" + name, access.toString());
+        setItem("FS:P:" + path.path, access.toString());
     }
 
-    public isType(name: string, type: FSType): boolean {
-        return this.getType(name) == type;
+    public isType(path: FPath, type: FSType): boolean {
+        return this.getType(path) == type;
     }
 
-    public getType(name: string): FSType | null {
-        const t: string = localStorage.getItem("FS:T:" + name) || "";
+    public getType(path: FPath): FSType | null {
+        const t: string = localStorage.getItem("FS:T:" + path.path) || "";
         return FSType[t as keyof typeof FSType] || null;
     }
 
-    public read(name: string): string {
-        return localStorage.getItem("FS:D:" + name) || "";
+    public read(path: FPath): string {
+        return localStorage.getItem("FS:D:" + path.path) || "";
     }
 
-    public write(name: string, data: string): void {
-        setItem("FS:D:" + name, data);
+    public write(path: FPath, data: string): void {
+        setItem("FS:D:" + path.path, data);
     }
 
-    public exists(name: string): boolean {
-        return this.getType(name) != null;
+    public exists(path: FPath): boolean {
+        return this.getType(path) != null;
     }
 
-    public getPerm(name: string): FSAccess {
-        const str = localStorage.getItem("FS:P:" + name) || "";
+    public getPerm(path: FPath): FSAccess {
+        const str = localStorage.getItem("FS:P:" + path.path) || "";
         return FSAccess.fromAccessString(str);
     }
 
@@ -295,4 +376,8 @@ enum FSType {
     out = "out",
 }
 
-(new FileSystem()).mkdir("/", "root", "root");
+(new FileSystem()).mkdir(new FPath("/", "/", "root"), "root", "root");
+(new FileSystem()).mkdir(new FPath("/bin", "/", "root"), "root", "root");
+(new FileSystem()).mkdir(new FPath("/home", "/", "root"), "root", "root");
+(new FileSystem()).mkdir(new FPath("/home/guest", "/", "root"), "guest", "guest");
+(new FileSystem()).mkdir(new FPath("/root", "/", "root"), "root", "root");

@@ -7,8 +7,69 @@
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="system.js"></script>
     <script>require(["system/root"]);</script>
+    <style id="color-set">
+        :root {
+            --blue: #3B78FF;
+            --green: #0F0;
+            --red: #F00;
+        }
+    </style>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        span.col-fg-red,
+        span.col-red {
+            color: var(--red);
+        }
+
+        span.col-fg-blue,
+        span.col-blue {
+            color: var(--blue);
+        }
+
+        span.col-fg-green,
+        span.col-green {
+            color: var(--green);
+        }
+
+        span.col-bg-red {
+            background-color: var(--red);
+        }
+
+        span.col-bg-green {
+            background-color: var(--green);
+        }
+
+        span.col-bg-blue {
+            background-color: var(--blue);
+        }
+
+        #main-display {
+            background-color: black;
+            width: 100vw;
+            height: 100vh;
+            overflow-y: scroll;
+            overflow-x: hidden;
+        }
+
+        #main-display>span {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            display: block;
+            color: #fff;
+            white-space: pre;
+        }
+
+        /* #main-display>span>span {
+            border: white 1px solid;
+        } */
+    </style>
 </head>
 
-<body></body>
+<body>
+    <div id="main-display"></div>
+</body>
 
 </html>
