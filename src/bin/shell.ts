@@ -45,8 +45,10 @@ import { IOFeed, iOutput, iProcess, iProcessInstance, iSystem } from "../interfa
                     console.log("SHELL INPUT", this.inputStr);
                     this.output("🎨reset;");
                     this.output("\n");
-                    this.output(this.inputStr);
-                    // this.output("\n");
+                    if (this.inputStr.length) {
+                        this.output(this.inputStr);
+                        this.output("\n");
+                    }
                     this.prompt();
                     this.inputStr = "";
                     break;
@@ -64,18 +66,22 @@ import { IOFeed, iOutput, iProcess, iProcessInstance, iSystem } from "../interfa
         }
 
         run(args: string[]): Promise<iOutput> {
+            if ((args[0] || "") == "--motd") {
+                this.output([[this.proc.pid.toString(), ...args]]);
+                this.output("\n");
+            }
             //console.log(this.proc.pid, args);
-            this.output([[this.proc.pid.toString(), ...args]]);
-            this.output("🎨FF0;");
-            this.output(["RAAAAAAA\nAAAA\tA\tAAAA"]);
-            this.output("1");
-            this.output("🎨F00;");
-            this.output("🎨BG-00F;");
-            this.output("2");
-            this.output("🎨reset;");
-            this.output("3");
-            this.output("4");
-            this.output("5\n");
+            // this.output([[this.proc.pid.toString(), ...args]]);
+            // this.output("🎨FF0;");
+            // this.output(["RAAAAAAA\nAAAA\tA\tAAAA"]);
+            // this.output("1");
+            // this.output("🎨F00;");
+            // this.output("🎨BG-00F;");
+            // this.output("2");
+            // this.output("🎨reset;");
+            // this.output("3");
+            // this.output("4");
+            // this.output("5\n");
             this.prompt();
             return this.endPromise.promise;
         }
