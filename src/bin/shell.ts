@@ -7,7 +7,7 @@ import { IOFeed, iOutput, iProcess, iProcessInstance, iSystem } from "../interfa
         private system: iSystem;
         private endPromise: { promise: Promise<iOutput>, res: (i: iOutput) => void, rej: (i: iOutput) => void };
 
-        private outHooks: IOFeed[] = [];
+        private outHooks: [IOFeed, string | null][] = [];
 
         private inputStr: string = "";
 
@@ -28,15 +28,15 @@ import { IOFeed, iOutput, iProcess, iProcessInstance, iSystem } from "../interfa
         }
 
         kill(): void {
-            this.endPromise.res("1");
+            this.endPromise.rej("kill");
         }
 
-        hookOut(hook: IOFeed): void {
-            this.outHooks.push(hook);
+        hookOut(hook: IOFeed, ident: string | null = null): void {
+            this.outHooks.push([hook, ident]);
         }
 
         private output(out: string | string[] | string[][]) {
-            this.outHooks.forEach(hook => hook.input(out));
+            this.outHooks.forEach(hook => hook[0].input(out, hook[1]));
         }
 
         input(input: string | string[] | string[][]): void {
@@ -53,6 +53,7 @@ import { IOFeed, iOutput, iProcess, iProcessInstance, iSystem } from "../interfa
                     this.inputStr = "";
                     break;
                 case "Backspace":
+                    "\ch"
                     if (this.inputStr.length > 0) {
                         this.inputStr = this.inputStr.substring(0, this.inputStr.length - 1);
                         this.output("🖥️<;");
@@ -87,12 +88,14 @@ import { IOFeed, iOutput, iProcess, iProcessInstance, iSystem } from "../interfa
         }
 
         private prompt(): void {
-            this.output("🎨reset;");
-            this.output("🎨green;");
-            this.output(`${this.system.user.name}@${this.hostname}`);
-            this.output("🎨reset;:🎨blue;");
-            this.output(`${this.path}`);
-            this.output("🎨reset;$ ");
+            this.output([
+                "\u001B[0m",
+                "\u001B[32m",
+                `${this.system.user.name}@${this.hostname}`,
+                "\u001B[0m:\u001B[34m",
+                `${this.path}`,
+                "\u001B[0m$ ",
+            ].join(""));
         }
 
         private get path(): string {

@@ -23,8 +23,8 @@ export interface iFileSystem {
 export type iOutput = string | string[] | string[][];
 
 export interface IOFeed {
-    hookOut(hook: IOFeed): void;
-    input(input: iOutput): void;
+    hookOut(hook: IOFeed, ident: string | null): void;
+    input(input: iOutput, ident: string | null): void;
 }
 
 export interface iProcess extends IOFeed {

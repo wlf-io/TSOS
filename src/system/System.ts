@@ -60,11 +60,11 @@ export class Process implements iProcess {
         this.instance.kill();
     }
 
-    hookOut(hook: IOFeed): void {
-        this.instance.hookOut(hook);
+    hookOut(hook: IOFeed, ident: string | null = null): void {
+        this.instance.hookOut(hook, ident);
     }
-    input(input: string | string[] | string[][]): void {
-        this.instance.input(input);
+    input(input: iOutput, ident: string | null = null): void {
+        this.instance.input(input, ident);
     }
 
     public get system(): SystemHandle {
@@ -144,7 +144,7 @@ export class System {
                 const guest = new UserIdent("guest", ["guest"]);
                 const guestSysHandle = new SystemHandle(guest);
                 const proc = System.createProcess(shell, guestSysHandle, null);
-                Display.hook(proc);
+                Display.hookOut(proc);
                 System.hookInput(proc);
                 proc.run(["--motd"]);
             });
@@ -155,6 +155,6 @@ export class System {
     }
 
     private static keyInput(ev: KeyboardEvent): void {
-        System.inputHooks.forEach(hook => hook.input(ev.key));
+        System.inputHooks.forEach(hook => hook.input(ev.key, "user"));
     }
 }
