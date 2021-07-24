@@ -13,7 +13,7 @@
     "watch-sys": "tsc --watch --project tsconfig.sys.json",
     "watch-bin": "tsc --watch --project tsconfig.bin.json",
     "watch": "webpack watch",
-    "server": "http-server distw"
+    "server": "http-server dist"
   },
   "devDependencies": {
     "webpack-dev-server": "^3.11.2",

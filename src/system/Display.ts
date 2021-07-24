@@ -1,4 +1,5 @@
 import { IOFeed, iOutput } from "../interfaces/SystemInterfaces";
+import LexerStream from "../shared/LexerStream";
 
 export default class Display {
     private static _instance: DisplayInstance | null = null;
@@ -393,14 +394,14 @@ class DisplayInstance implements IOFeed {
 type LexToke = { [k: string]: (string | RegExp)[] };
 
 class DisplayLexer {
-    private input: DisplayStream;
+    private input: LexerStream;
     private tokes: LexToke = {};
 
     public static createFromString(input: string, tokes: LexToke) {
-        return new DisplayLexer(new DisplayStream(input), tokes);
+        return new DisplayLexer(new LexerStream(input), tokes);
     }
 
-    constructor(input: DisplayStream, tokes: LexToke) {
+    constructor(input: LexerStream, tokes: LexToke) {
         this.input = input;
         this.tokes = tokes;
     }
@@ -467,68 +468,5 @@ class DisplayLexer {
             if (func(s, this.input.peek())) break;
         }
         return str;
-    }
-}
-
-class DisplayStream {
-    private input: string;
-
-    private lin: number = 0;
-
-    private pos: number = 0;
-
-    private col: number = 0;
-
-    constructor(input: string) {
-        this.input = input;
-    }
-
-    get position(): number {
-        return this.pos;
-    }
-
-    get line(): number {
-        return this.lin;
-    }
-
-    get column(): number {
-        return this.col;
-    }
-
-    public next(): string {
-        const char = this.peek();
-        this.pos++;
-        if (char == "\n") {
-            this.lin++;
-            this.col = 0;
-        } else {
-            this.col++;
-        }
-        return char;
-    }
-
-    public peek(count: number = 0): string {
-        return this.input.charAt(this.pos + count);
-    }
-
-    public eof() {
-        return this.peek() == "";
-    }
-
-    public croak(error: string) {
-        return new Error(`[${this.line}:${this.col}] - ${error}`);
-    }
-
-    public rewindTo(position: number) {
-        this.rewind();
-        while (this.pos < position) {
-            this.next();
-        }
-    }
-
-    public rewind() {
-        this.pos = 0;
-        this.lin = 0;
-        this.col = 0;
     }
 }

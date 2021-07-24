@@ -1,5 +1,6 @@
 import { iOutput } from "../interfaces/SystemInterfaces";
 import BaseApp from "./base/base";
+import ShellLexer from "./shell/ShellLexer";
 
 export default class shell extends BaseApp {
 
@@ -11,7 +12,7 @@ export default class shell extends BaseApp {
                 this.output("\u001B[0m");
                 this.output("\n");
                 if (this.inputStr.length) {
-                    this.output(this.inputStr);
+                    this.output(JSON.stringify(ShellLexer.createFromString(this.inputStr).all().map(t => t.value)));
                     this.output("\n");
                     this.system.fileSystem.append("~/.shell_history", this.inputStr + "\n");
                     if (this.inputStr === "history") {
@@ -29,7 +30,6 @@ export default class shell extends BaseApp {
                 }
                 break;
             default:
-                console.log(input);
                 this.inputStr += input;
                 this.output(input);
                 break;

@@ -135,6 +135,7 @@ export class System {
         const rootSysHandle = new SystemHandle(root);
         document.onkeypress = ev => {
             System.keyInput(ev);
+            return false;
         };
         document.onkeydown = ev => {
             if (ev.key == "Backspace") {
