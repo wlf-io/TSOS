@@ -2,11 +2,7 @@
 
 <head>
     <title>Test</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js"
-        integrity="sha512-c3Nl8+7g4LMSTdrm621y7kf9v3SDPnhxLNhcjFJbKECVnmZHTdo+IRO05sNLTH/D3vA6u1X32ehoLC7WFVdheg=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="system.js"></script>
-    <script>require(["system/root"]);</script>
     <style id="color-set">
         :root {
             --blue: #3B78FF;
@@ -19,18 +15,15 @@
             margin: 0;
         }
 
-        span.col-fg-red,
-        span.col-red {
+        span.col-fg-red {
             color: var(--red);
         }
 
-        span.col-fg-blue,
-        span.col-blue {
+        span.col-fg-blue {
             color: var(--blue);
         }
 
-        span.col-fg-green,
-        span.col-green {
+        span.col-fg-green {
             color: var(--green);
         }
 
@@ -60,6 +53,23 @@
             display: block;
             color: #fff;
             white-space: pre;
+        }
+
+        @keyframes borderBlink {
+
+            from,
+            to {
+                border-color: transparent
+            }
+
+            50% {
+                border-color: white
+            }
+        }
+
+        #main-display span:last-child span:last-child {
+            border-right: white solid 1px;
+            animation: borderBlink 1s step-end infinite;
         }
 
         /* #main-display>span>span {

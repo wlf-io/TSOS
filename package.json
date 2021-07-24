@@ -5,18 +5,19 @@
   "dependencies": {
     "http-server": "^0.12.3",
     "ts-loader": "^9.2.3",
-    "typescript": "^4.3.5",
-    "webpack": "^5.45.1",
-    "webpack-cli": "^4.7.2"
+    "typescript": "^4.3.5"
   },
   "scripts": {
-    "dev": "webpack --mode development",
+    "dev": "webpack --mode production",
     "build": "tsc --project tsconfig.sys.json && tsc --project tsconfig.bin.json",
     "watch-sys": "tsc --watch --project tsconfig.sys.json",
     "watch-bin": "tsc --watch --project tsconfig.bin.json",
-    "server": "http-server dist"
+    "watch": "webpack watch",
+    "server": "http-server distw"
   },
   "devDependencies": {
-    "webpack-dev-server": "^3.11.2"
+    "webpack-dev-server": "^3.11.2",
+    "webpack": "^5.46.0",
+    "webpack-cli": "^4.7.2"
   }
 }

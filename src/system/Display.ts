@@ -17,7 +17,25 @@ export default class Display {
     }
 }
 
-type DisplayColour = { f: string | null, b: string | null };
+class DisplayStyle {
+    public f: string | null = null;
+    public b: string | null = null;
+    public s: string | null = null;
+    public r: string | null = null;
+
+    public styleSpan(span: HTMLSpanElement): HTMLSpanElement {
+        if (this.f != null) {
+            span.classList.add("col-fg-" + this.f);
+        }
+        if (this.b != null) {
+            span.classList.add("col-bg-" + this.b);
+        }
+        if (this.s != null) {
+            span.classList.add("styl-" + this.s);
+        }
+        return span;
+    }
+}
 
 class DisplayInstance implements IOFeed {
 
@@ -31,11 +49,13 @@ class DisplayInstance implements IOFeed {
     // private css: string[] = [];
     // private style: { [k: string]: string } = {};
 
-    private colours: { [k: string]: { [k: string]: DisplayColour } } = {};
+    private colours: { [k: string]: { [k: string]: DisplayStyle } } = {};
 
 
     constructor(elem: HTMLElement) {
         this.container = elem;
+        this.emptyElem(this.container);
+        this.container.append(document.createElement("span"));
     }
 
     // private getRow(line: number): HTMLSpanElement {
@@ -59,22 +79,83 @@ class DisplayInstance implements IOFeed {
         throw new Error("Method not implemented.");
     }
 
-    private addColour(row: number, column: number, col: string): void {
+    private mapStyleNum(num: number): string | null {
+        let style: null | string = null;
+        switch (num) {
+            case 1:
+                style = "bold";
+                break;
+            case 3:
+                style = "italic";
+            case 4:
+                style = "underline";
+                break;
+            case 5:
+                style = "blink";
+                break;
+            case 6:
+                style = "blick-fast";
+                break;
+            case 7:
+                style = "reverse";
+                break;
+            case 8:
+                style = "hide";
+                break;
+            case 9:
+                style = "strike";
+                break;
+            case 0:
+            default:
+                style = null;
+                break;
+        }
+        return style;
+    }
+
+    private mapColour(c: number): string {
+        const colours: { [k: string]: string } = {
+            "0": "black",
+            "1": "red",
+            "2": "green",
+            "3": "yellow",
+            "4": "blue",
+            "5": "purple",
+            "6": "cyan",
+            "7": "white",
+        };
+
+
+        return colours[c.toString().charAt(c.toString().length - 1)] || "white";
+    }
+
+    private mapColourType(c: number): "f" | "b" {
+        if (c >= 40 && c < 50) return "b";
+        return "f";
+    }
+
+    private addColour(row: number, column: number, col: string): number[] {
         if (!this.colours.hasOwnProperty(`${row}`)) {
             this.colours[`${row}`] = {};
         }
-        const colour: DisplayColour = this.colours[`${row}`][`${column}`] || { f: null, b: null };
-        const cols = col.split(/[\[;]+/);
+        const style: DisplayStyle = this.colours[`${row}`][`${column}`] || new DisplayStyle();
+        style.r = col;
+        const cols = col.split(";");
+        const colnum: number = parseInt(cols.pop() || "0");
+        const stylnum: number = parseInt(cols.pop() || "0");
 
-        parseInt(cols[cols.length - 1]);
+        const colour = this.mapColour(colnum)
 
-        if (cols.length < 2) cols.unshift("f");
-        if (cols[0] == "f") {
-            colour.f = cols[1];
+        style.s = this.mapStyleNum(stylnum)
+
+        if (this.mapColourType(colnum) == "b") {
+            style.b = colour;
         } else {
-            colour.b = cols[1];
+            style.f = colour;
         }
-        this.colours[`${row}`][`${column}`] = colour;
+
+        this.colours[`${row}`][`${column}`] = style;
+        return [row];
     }
 
     input(_input: iOutput, _ident: string | null): void {
@@ -94,6 +175,12 @@ class DisplayInstance implements IOFeed {
         this.container.scrollTop = this.container.scrollHeight;
     }
 
+    private emptyElem(elem: Element): void {
+        while (elem.firstChild) {
+            elem.removeChild(elem.firstChild);
+        }
+    }
+
     private redrawLines(lines: number[]): void {
         // let spans = this.container.children;
         lines.sort();
@@ -103,8 +190,31 @@ class DisplayInstance implements IOFeed {
         });
     }
 
+    private getLastDisplayStyleBefore(line: number): DisplayStyle {
+        let set: [number, [number, DisplayStyle][]][] = Object.entries(this.colours).map(v => {
+            const entries = Object.entries(v[1]);
+            return [parseInt(v[0]), entries.map(v => [parseInt(v[0]), v[1]])];
+        });
+        set = set.filter(v => v[0] < line);
+        set = set.filter(v => v[1].length);
+        set.sort((a, b) => b[0] - a[0]);
+        ((set[0] || [])[1] || []).sort((a, b) => b[0] - a[0]);
+        return (((set[0] || [])[1] || [])[0] || [])[1] || new DisplayStyle();
+    }
+
     private drawLine(line: string, index: number): void {
+
+        const row = this.container.children.item(index);
+        if (row == null) {
+            console.log("couldnt find row for", index, line);
+            return;
+        }
+
         const colours = this.colours[index] || {};
+
+        if (!colours.hasOwnProperty("0")) {
+            colours["0"] = this.getLastDisplayStyleBefore(index);
+        }
         const cols: number[] = Object.keys(colours).map(c => parseInt(c));
         let last: number = 0;
         const parts: string[] = [];
@@ -114,30 +224,58 @@ class DisplayInstance implements IOFeed {
             last = c;
         });
         parts.push(line.substring(last));
-        console.log(parts, cols, Object.keys(colours).map(c => parseInt(c)), colours);
+
+
+        this.emptyElem(row);
+
+        parts.map((txt, i) => {
+            const span = document.createElement("span");
+            span.textContent = txt;
+            const style = Object.values(colours)[i] || null;
+            if (style !== null) {
+                return style.styleSpan(span);
+            }
+            return span;
+        }).forEach(span => {
+            row.append(span);
+        });
+    }
+
+
+    private handleEscapeSequence(row: number, column: number, sequence: string): number[] {
+        let rowsAffected: number[] = [];
+        const type = sequence.charAt(sequence.length - 1).toLowerCase();
+        const pass = sequence.substring(2, sequence.length - 1);
+        switch (type) {
+            case "m":
+                rowsAffected = this.addColour(row, column, pass);
+                break;
+            default:
+                console.log("Unhandled Escape Sequence", sequence);
+        }
+        return rowsAffected;
     }
 
 
     private writeInputToData(input: string): number[] {
         const linesAffected: number[] = [];
 
-        const lex = DisplayLexer.createFromString(input, { "\u001B": ["m"] });
+        const lex = DisplayLexer.createFromString(input, { "\u001B": [/[a-z]/] });
 
         while (!lex.eof()) {
             const next = lex.next() || "";
             const r = this.data.length - 1 - this.row;
+            let c = this.column < 0 ? this.data[r].length - 1 : this.column;
+            if (c < 0) c = 0;
             switch (next[0] || "") {
                 case "\u001B":
-                    console.log("ADD COLOR");
-                    let c = this.column < 0 ? this.data[r].length - 1 : this.column;
-                    if (c < 0) c = 0;
-                    this.addColour(r, this.column < 0 ? this.data[r].length - 1 : this.column, next);
-                    linesAffected.push(r);
+                    linesAffected.push(...this.handleEscapeSequence(r, c, next));
                     break;
                 case "\n":
                     this.row--;
                     if (this.row < 0) {
                         this.data.push("");
+                        this.container.append(document.createElement("span"));
                         this.row = 0;
                         this.column = 0;
                         linesAffected.push(this.data.length - 1);
@@ -252,7 +390,7 @@ class DisplayInstance implements IOFeed {
     // }
 }
 
-type LexToke = { [k: string]: string[] };
+type LexToke = { [k: string]: (string | RegExp)[] };
 
 class DisplayLexer {
     private input: DisplayStream;
@@ -308,8 +446,15 @@ class DisplayLexer {
         const toke = this.input.peek();
         const end = this.tokes[toke] || ";";
         return this.readUntil(s => {
-            // console.log("TEST: ", toke, end, s);
-            return end.includes(s);
+            return end.some(e => {
+                let p = false;
+                if (typeof e === "string") {
+                    p = e == s;
+                } else {
+                    p = e.test(s);
+                }
+                return p;
+            });
         });
     }
 

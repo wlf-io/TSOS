@@ -6,11 +6,17 @@ export interface iSystem {
 export interface iUserIdent {
     name: string;
     groups: string[];
+
+    getEnv(key: string): string;
+    setEnv(key: string, value: string): void;
+    getEnvEntries(): [string, string][];
 }
 
 export interface iFileSystem {
     read(path: string): string | null;
     write(path: string, data: string): void;
+    append(path: string, data: string): void;
+    prepend(path: string, data: string): void;
     mkdir(path: string): void;
     touch(path: string): void;
     isFile(path: string): boolean;

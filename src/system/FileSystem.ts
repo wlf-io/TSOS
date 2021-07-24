@@ -177,6 +177,20 @@ export class FileSystemHandle implements iFileSystem {
         this.fs.write(path, data);
     }
 
+    public append(path: string | FPath, data: string) {
+        path = this.ensureFPath(path);
+        // console.log(`${this.user.name} : write : ${path}`);
+        this.writeCheck(path);
+        this.fs.append(path, data);
+    }
+
+    public prepend(path: string | FPath, data: string) {
+        path = this.ensureFPath(path);
+        // console.log(`${this.user.name} : write : ${path}`);
+        this.writeCheck(path);
+        this.fs.prepend(path, data);
+    }
+
     public mkdir(path: string | FPath) {
         path = this.ensureFPath(path);
         // console.log(`${this.user.name} : mkdir : ${path}`);
@@ -223,7 +237,7 @@ export class FileSystemHandle implements iFileSystem {
 
     private writeCheck(path: FPath): void {
         if (!this.fs.exists(path)) {
-            throw `${path} doesn't exist [WC]`;
+            this.touch(path);
         }
         if (!this.canWrite(path)) {
             throw `${path} access denied [WC]`;
@@ -311,6 +325,7 @@ export class FileSystemHandle implements iFileSystem {
             throw `${path} is not a directory`;
         }
         this._cwd = path.path;
+        this.user.setEnv("cwd", path.path);
     }
 }
 
@@ -350,6 +365,14 @@ class FileSystem {
 
     public write(path: FPath, data: string): void {
         setItem("FS:D:" + path.path, data);
+    }
+
+    public append(path: FPath, data: string): void {
+        setItem("FS:D:" + path.path, this.read(path) + data);
+    }
+
+    public prepend(path: FPath, data: string): void {
+        setItem("FS:D:" + path.path, data + this.read(path));
     }
 
     public exists(path: FPath): boolean {

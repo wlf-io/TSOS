@@ -13,7 +13,6 @@ export class SystemHandle implements iSystem {
     constructor(user: UserIdent) {
         this._user = user;
         this.fs = new FileSystemHandle(this.user);
-        this.fs.setCwd("~");
     }
 
     public get user(): UserIdent {
@@ -109,21 +108,26 @@ export class System {
     private static inputHooks: IOFeed[] = [];
 
     public static createProcess(bin: string, system: SystemHandle, creator: Process | null): Process {
-        const next = eval(bin);
+        const next = eval(bin).default || null;
         System.processCount++;
         return new Process(System.processCount, system, next, creator);
     }
 
     public static setup(system: iSystem) {
-        if (!system.fileSystem.isFile("/bin/shell")) {
-            system.fileSystem.touch("/bin/shell");
-        }
-        return fetch("/bin/shell.js")
-            .then(response => response.text())
-            .then(text => {
-                system.fileSystem.write("/bin/shell", text);
-                return text;
-            })
+        return fetch("/bin.json")
+            .then(response => response.json())
+            .then(json => {
+                console.group("BIN JSON")
+                Object.entries(json).forEach(e => {
+                    if (typeof e[1] == "string") {
+                        system.fileSystem.write("/bin/" + e[0], e[1]);
+                    } else {
+                        console.log(e);
+                    }
+                });
+                console.groupEnd();
+                return json;
+            });
     }
 
     public static boot(): void {
