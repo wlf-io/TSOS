@@ -16,8 +16,11 @@ export default class ShellLexer {
     private isWhitespace(ch: string): boolean {
         return " \r\n\t".indexOf(ch) >= 0;
     }
-    private isNotWhitespace(ch: string): boolean {
-        return !this.isWhitespace(ch);;
+    private isAToZ0To9(ch: string): boolean {
+        return /[a-zA-Z0-9]/.test(ch);
+    }
+    private isNotAToZ0To9(ch: string): boolean {
+        return !this.isAToZ0To9(ch) && !this.isWhitespace(ch);
     }
 
     private readWhile(func: (ch: string) => boolean): string {
@@ -55,7 +58,8 @@ export default class ShellLexer {
         const column = this.stream.column;
 
         if (ch == "'" || ch == '"') return this.readWrapped(ch, TokenType.string, line, column);
-        else return this.readNonWhitespace(TokenType.ident, line, column);
+        else if (this.isNotAToZ0To9(ch)) return this.readSpecial(TokenType.spec, line, column);
+        else return this.readIdentifier(TokenType.ident, line, column);
 
         // throw this.stream.croak("Can't handle character: " + ch);
     }
@@ -83,8 +87,19 @@ export default class ShellLexer {
         };
     }
 
-    private readNonWhitespace(type: TokenType, line: number, column: number) {
-        const raw = this.readWhile(ch => this.isNotWhitespace(ch));
+    private readIdentifier(type: TokenType, line: number, column: number) {
+        const raw = this.readWhile(ch => this.isAToZ0To9(ch));
+        return {
+            type: type,
+            value: raw,
+            raw: raw,
+            line,
+            column,
+        };
+    }
+
+    private readSpecial(type: TokenType, line: number, column: number) {
+        const raw = this.readWhile(ch => this.isNotAToZ0To9(ch));
         return {
             type: type,
             value: raw,
@@ -152,4 +167,5 @@ type Token = {
 export enum TokenType {
     string,
     ident,
+    spec,
 }

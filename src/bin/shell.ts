@@ -23,10 +23,12 @@ export default class shell extends BaseApp {
                 this.inputStr = "";
                 break;
             case "Backspace":
-                "\ch"
+                // "\ch"
                 if (this.inputStr.length > 0) {
                     this.inputStr = this.inputStr.substring(0, this.inputStr.length - 1);
-                    this.output("🖥️<;");
+                    this.output("BS");
+                    this.output("\u007F");
+                    this.output("SB");
                 }
                 break;
             default:
