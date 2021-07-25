@@ -40,8 +40,6 @@ class DisplayStyle {
 
 class DisplayInstance implements IOFeed {
 
-    private state: string = "";
-
     private container: HTMLElement;
     private column: number = -1;
     private row: number = 0;
@@ -141,11 +139,6 @@ class DisplayInstance implements IOFeed {
     }
 
     input(_input: iOutput, _ident: string | null): void {
-        console.log("DISPLAY INPUT", typeof _input == "string" ? _input.split("") : _input);
-        if (_input == "\u007F") {
-            this.state = "bs";
-            console.log("BACKSPACE START");
-        }
         let input = "";
         if (_input instanceof Array) {
             input = _input.map(i => (i instanceof Array) ? i.join("\t") : i).join("\n");
@@ -158,7 +151,6 @@ class DisplayInstance implements IOFeed {
         this.redrawLines(lines);
 
         this.container.scrollTop = this.container.scrollHeight;
-        this.state = "";
     }
 
     private emptyElem(elem: Element): void {
@@ -171,6 +163,7 @@ class DisplayInstance implements IOFeed {
         lines.sort();
         lines.forEach(l => {
             const line = this.data[l];
+            console.log("Redraw", l, line);
             this.drawLine(line, l);
         });
     }
@@ -241,58 +234,101 @@ class DisplayInstance implements IOFeed {
         return rowsAffected;
     }
 
+    private handleSpecialChar(char: string): number[] {
+        const r = this.data.length - 1 - this.row;
+        const row: string = this.data[r];
+        let c = this.column < 0 ? this.data[r].length - 1 : this.column;
+        if (c < 0) c = 0;
+        const linesAffected: number[] = [];
+        switch (char) {
+            case "\n":
+                this.row--;
+                if (this.row < 0) {
+                    this.data.push("");
+                    this.container.append(document.createElement("span"));
+                    this.row = 0;
+                    this.column = 0;
+                    linesAffected.push(this.data.length - 1);
+                }
+                break;
+            case "\u0007":
+                this.beep();
+                break;
+            case "\b":
+                if (row.length > 0) {
+                    console.log(r, row, c, row.substring(0, c - 1), row.substring(c));
+                    this.data[r] = row.substring(0, c - 1) + row.substring(c);
+                    c--;
+                    this.column = c;
+                    linesAffected.push(r);
+                } else {
+                    console.log("handle going back a line");
+                }
+                break;
+            case "\u007F":
+                console.log("delete");
+                break;
+            case "\t":
+                linesAffected.push(...this.handleChars(char));
+                break;
+            default:
+                linesAffected.push(...this.handleChars("[" + encodeURIComponent(char) + "]"));
+                break;
+        }
+        return linesAffected;
+    }
 
     private writeInputToData(input: string): number[] {
         const linesAffected: number[] = [];
 
         const lex = DisplayLexer.createFromString(input, [
-            { s: /[\u0000-\u001F]/, e: /[a-z]/ },
-            { s: /[\u007F]/, e: null },
+            { s: /[\u001B]/, e: /[a-zA-Z]/ },
+            { s: /[\u0000-\u001A\u007F]/, e: null },
         ]);
 
         while (!lex.eof()) {
             const next = lex.next() || "";
-            if (this.state == "bs") {
-                console.log(next);
-            }
 
-            const r = this.data.length - 1 - this.row;
-            let c = this.column < 0 ? this.data[r].length - 1 : this.column;
-            if (c < 0) c = 0;
-            if (/[\u0000-\u001F]/.test(next[0] || "")) {
-                linesAffected.push(...this.handleEscapeSequence(r, c, next));
+            if (/[\u0000-\u001A\u007F]/.test(next[0] || "")) {
+                linesAffected.push(...this.handleSpecialChar(next))
             } else {
-                switch (next[0] || "") {
-                    case "\u007F":
-                        console.log("BACKSPACE");
-                        break;
-                    case "\n":
-                        this.row--;
-                        if (this.row < 0) {
-                            this.data.push("");
-                            this.container.append(document.createElement("span"));
-                            this.row = 0;
-                            this.column = 0;
-                            linesAffected.push(this.data.length - 1);
-                        }
-                        break;
-                    default:
-                        let row = this.data[r];
-                        if (this.column >= row.length || this.column < 0) {
-                            row += next;
-                        } else {
-                            row = row.substr(0, this.column) + next + row.substr(this.column + next.length);
-                        }
-                        if (this.column > -1) {
-                            this.column += next.length;
-                        }
-                        this.data[r] = row;
-                        linesAffected.push(r);
-                        break;
-                }
+                linesAffected.push(...this.handleChars(next));
             }
         }
 
         return [...new Set(linesAffected)];
     }
+
+    private handleChars(next: string): number[] {
+
+        const r = this.data.length - 1 - this.row;
+        let c = this.column < 0 ? this.data[r].length - 1 : this.column;
+        if (c < 0) c = 0;
+        const linesAffected: number[] = [];
+        switch (next[0] || "") {
+            case "\u001B":
+                linesAffected.push(...this.handleEscapeSequence(r, c, next));
+                break;
+            default:
+                let row = this.data[r];
+                if (this.column >= row.length || this.column < 0) {
+                    row += next;
+                } else {
+                    row = row.substr(0, this.column) + next + row.substr(this.column + next.length);
+                }
+                if (this.column > -1) {
+                    this.column += next.length;
+                }
+                this.data[r] = row;
+                linesAffected.push(r);
+                break;
+        }
+        return linesAffected;
+    }
+
+    private beep() {
+        var snd = new Audio("data:audio/wav;base64,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qJrx4KOQjahZxWbcZgztj2c49nKmkId44S71j0c8eV9yDK6uPRzx5X18eDvjvQ6yKo9ZSS6l//8elePK/Lf//IInrOF/FvDoADYAGBMGb7FtErm5MXMlmPAJQVgWta7Zx2go+8xJ0UiCb8LHHdftWyLJE0QIAIsI+UbXu67dZMjmgDGCGl1H+vpF4NSDckSIkk7Vd+sxEhBQMRU8j/12UIRhzSaUdQ+rQU5kGeFxm+hb1oh6pWWmv3uvmReDl0UnvtapVaIzo1jZbf/pD6ElLqSX+rUmOQNpJFa/r+sa4e/pBlAABoAAAAA3CUgShLdGIxsY7AUABPRrgCABdDuQ5GC7DqPQCgbbJUAoRSUj+NIEig0YfyWUho1VBBBA//uQZB4ABZx5zfMakeAAAAmwAAAAF5F3P0w9GtAAACfAAAAAwLhMDmAYWMgVEG1U0FIGCBgXBXAtfMH10000EEEEEECUBYln03TTTdNBDZopopYvrTTdNa325mImNg3TTPV9q3pmY0xoO6bv3r00y+IDGid/9aaaZTGMuj9mpu9Mpio1dXrr5HERTZSmqU36A3CumzN/9Robv/Xx4v9ijkSRSNLQhAWumap82WRSBUqXStV/YcS+XVLnSS+WLDroqArFkMEsAS+eWmrUzrO0oEmE40RlMZ5+ODIkAyKAGUwZ3mVKmcamcJnMW26MRPgUw6j+LkhyHGVGYjSUUKNpuJUQoOIAyDvEyG8S5yfK6dhZc0Tx1KI/gviKL6qvvFs1+bWtaz58uUNnryq6kt5RzOCkPWlVqVX2a/EEBUdU1KrXLf40GoiiFXK///qpoiDXrOgqDR38JB0bw7SoL+ZB9o1RCkQjQ2CBYZKd/+VJxZRRZlqSkKiws0WFxUyCwsKiMy7hUVFhIaCrNQsKkTIsLivwKKigsj8XYlwt/WKi2N4d//uQRCSAAjURNIHpMZBGYiaQPSYyAAABLAAAAAAAACWAAAAApUF/Mg+0aohSIRobBAsMlO//Kk4soosy1JSFRYWaLC4qZBYWFRGZdwqKiwkNBVmoWFSJkWFxX4FFRQWR+LsS4W/rFRb/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////VEFHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAU291bmRib3kuZGUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMjAwNGh0dHA6Ly93d3cuc291bmRib3kuZGUAAAAAAAAAACU=");
+        snd.play();
+    }
+
 }

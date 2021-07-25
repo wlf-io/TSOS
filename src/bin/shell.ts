@@ -22,13 +22,17 @@ export default class shell extends BaseApp {
                 this.prompt();
                 this.inputStr = "";
                 break;
+            case "Tab":
+                this.inputStr += "\t";
+                this.output("\t");
+                break;
             case "Backspace":
                 // "\ch"
                 if (this.inputStr.length > 0) {
                     this.inputStr = this.inputStr.substring(0, this.inputStr.length - 1);
-                    this.output("BS");
-                    this.output("\u007F");
-                    this.output("SB");
+                    this.output("\b");
+                } else {
+                    this.output("\u0007");
                 }
                 break;
             default:

@@ -138,9 +138,14 @@ export class System {
             return false;
         };
         document.onkeydown = ev => {
-            if (ev.key == "Backspace") {
-                System.keyInput(ev);
-                return false;
+            switch (ev.key) {
+                case "Backspace":
+                case "Tab":
+                    System.keyInput(ev);
+                    return false;
+                default:
+                    console.log(ev.key);
+                    break;
             }
         };
         System.setup(rootSysHandle)
