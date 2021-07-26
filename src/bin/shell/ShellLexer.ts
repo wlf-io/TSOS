@@ -24,7 +24,7 @@ export default class ShellLexer {
     }
 
     private isSpecial(ch: string): boolean {
-        return [";", "&", ">", "|", "<", "$", "[", "]"].includes(ch);
+        return [";", "&", ">", "|", "<", "[", "]", "=", "!"].includes(ch);
     }
 
     private readWhile(func: (ch: string) => boolean): string {
@@ -82,7 +82,7 @@ export default class ShellLexer {
     }
 
     private readWrapped(wrapper: string, type: TokenType, line: number, column: number): ShellToken {
-        const raw = this.readEscaped(wrapper);
+        const raw = this.readEscaped(wrapper, true);
         return {
             type: type,
             value: raw.substring(1, raw.length - 1),
@@ -114,8 +114,8 @@ export default class ShellLexer {
         };
     }
 
-    private readEscaped(end: string | ((ch: string, next: string) => boolean), escape: string = "\\") {
-        let escaped = true;
+    private readEscaped(end: string | ((ch: string, next: string) => boolean), skipFirst: boolean = false, escape: string = "\\") {
+        let escaped = skipFirst;
         let str = "";
         while (!this.stream.eof()) {
             const ch = this.stream.next();
@@ -141,9 +141,12 @@ export default class ShellLexer {
     }
 
     private resolveEscapedChar(char: string): string {
+        console.log("escaped char [" + char + "]");
         switch (char) {
             case "n":
                 return "\n";
+            case "$":
+                return "\\$";
             default:
                 return char;
         }

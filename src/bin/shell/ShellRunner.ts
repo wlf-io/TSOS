@@ -32,7 +32,9 @@ export default class ShellRunner implements IOFeed {
         return blocks.reduce(
             (p, tokes) => this.chainBlock(p, tokes)
             , Promise.resolve()
-        );
+        ).catch(e => {
+            this.output(e.toString(), "error")
+        });
     }
 
     private chainBlock(promise: Promise<any>, block: ShellToken[]) {

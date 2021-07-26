@@ -7,6 +7,8 @@ export default class shell extends BaseApp {
     private motd: boolean = false;
     private inputStr: string = "";
     private _hostname: string | null = null;
+    private historyIndex: number = -1;
+    private column: number = 0;
 
     protected handleFlag(flag: string, _arg: string): boolean {
         switch (flag.toLowerCase()) {
@@ -30,6 +32,9 @@ export default class shell extends BaseApp {
     }
 
     private userInput(input: iOutput): void {
+        if (typeof input != "string") {
+            throw "USER INPUT ARRAY???";
+        }
         switch (input) {
             case "Enter":
                 this.output("\u001B[0m");
@@ -40,6 +45,7 @@ export default class shell extends BaseApp {
                     runner.run()
                         .then(() => {
                             this.inputStr = "";
+                            this.column = 0;
                             this.output("\n");
                             this.prompt();
                         });
@@ -49,8 +55,7 @@ export default class shell extends BaseApp {
                 }
                 break;
             case "Tab":
-                this.inputStr += "\t";
-                this.output("\t");
+                console.log("TODO : auto-complete")
                 break;
             case "Backspace":
                 if (this.inputStr.length > 0) {
@@ -60,11 +65,55 @@ export default class shell extends BaseApp {
                     this.output("\u0007");
                 }
                 break;
+            case "ArrowUp":
+            case "ArrowDown":
+                this.history(input == "ArrowUp" ? 1 : -1);
+                break;
+            case "ArrowLeft":
+            case "ArrowRight":
+                this.nav(input == "ArrowLeft" ? -1 : 1);
+                break;
+            case "Home":
+                break;
+            case "End":
+                break;
             default:
-                this.inputStr += input;
-                this.output(input);
+                this.addToInput(input);
                 break;
         }
+    }
+
+    private addToInput(ch: string) {
+        this.inputStr = this.inputStr.substring(0, this.column) + ch + this.inputStr.substring(this.column);
+        if (this.column < this.inputStr.length - 1) {
+            this.output("\u001B[K");
+            this.output(this.inputStr.substr(this.column));
+            console.log("REST OF LINE", this.inputStr.substr(this.column));
+            this.output((new Array(this.inputStr.length - this.column)).join("\u001B[D"));
+        } else {
+            this.output(ch);
+        }
+        this.column += ch.length;
+    }
+
+    private history(dir: number): void {
+        console.log("history", dir, this.historyIndex + dir);
+        this.output("\u001B[K");
+    }
+
+    private nav(dir: number): void {
+        console.log("nav", dir);
+        let dirC = "C";
+        if (dir < 0) {
+            if (this.column == 0) return;
+            this.column--;
+            dirC = "D";
+            dir *= -1;
+        } else {
+            if (this.column == this.inputStr.length) return;
+            this.column++;
+        }
+        this.output(`\u001B[${dir}${dirC}`);
     }
 
     start(args: string[]): void {

@@ -71,6 +71,10 @@ module.exports = [
             chown: './src/bin/chown.ts',
             tail: './src/bin/tail.ts',
             head: './src/bin/head.ts',
+            clear: './src/bin/clear.ts',
+            sleep: './src/bin/sleep.ts',
+            printenv: './src/bin/printenv.ts',
+            args: './src/bin/args.ts',
         },
         output: {
             filename: "[name].js",

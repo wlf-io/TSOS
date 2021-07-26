@@ -97,10 +97,18 @@ export class System {
             switch (ev.key) {
                 case "Backspace":
                 case "Tab":
+                case "ArrowUp":
+                case "ArrowDown":
+                case "ArrowLeft":
+                case "ArrowRight":
+                case "Home":
+                case "End":
                     System.keyInput(ev);
                     return false;
                 default:
-                    // console.log(ev.key);
+                    if (ev.key == "d") {
+                        console.log(ev);
+                    }
                     break;
             }
         };

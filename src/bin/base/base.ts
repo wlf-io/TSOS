@@ -12,6 +12,8 @@ export default abstract class BaseApp implements iProcessInstance {
 
     private running: boolean = false;
 
+    protected rawArgs: string[] = [];
+
     constructor(proc: iProcess) {
         this.proc = proc;
         this.system = proc.system;
@@ -47,6 +49,7 @@ export default abstract class BaseApp implements iProcessInstance {
     public run(args: string[]): Promise<iOutput> {
         if (this.running) return Promise.reject("Already Running");
         this.running = true;
+        this.rawArgs = [...args];
         args = this.processArgFlags(args);
         window.setTimeout(() => this.start(args), 1);
         return this.endPromise.promise;

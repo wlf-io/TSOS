@@ -34,6 +34,7 @@ class DisplayStyle {
         if (this.s != null) {
             span.classList.add("styl-" + this.s);
         }
+        span.classList.add("disp-row-segment");
         return span;
     }
 }
@@ -46,6 +47,8 @@ class DisplayInstance implements IOFeed {
 
     private data: string[] = [""];
 
+    private outHooks: [IOFeed, string][] = [];
+
     private colours: { [k: string]: { [k: string]: DisplayStyle } } = {};
 
 
@@ -55,8 +58,8 @@ class DisplayInstance implements IOFeed {
         this.container.append(document.createElement("span"));
     }
 
-    hookOut(_hook: IOFeed): void {
-        throw new Error("Method not implemented.");
+    hookOut(hook: IOFeed, ident: string): void {
+        this.outHooks.push([hook, ident]);
     }
 
     private mapStyleNum(num: number): string | null {
@@ -153,6 +156,10 @@ class DisplayInstance implements IOFeed {
         this.container.scrollTop = this.container.scrollHeight;
     }
 
+    private output(output: iOutput, ident?: string): void {
+        this.outHooks.forEach(h => h[0].input(output, ident || h[1]));
+    }
+
     private emptyElem(elem: Element): void {
         while (elem.firstChild) {
             elem.removeChild(elem.firstChild);
@@ -188,6 +195,11 @@ class DisplayInstance implements IOFeed {
             return;
         }
 
+
+        const rowNum = this.data.length - 1 - this.row;
+        let colNum = this.column < 0 ? this.data[rowNum].length - 1 : this.column;
+        if (colNum < 0) colNum = 0;
+
         const colours = this.colours[index] || {};
 
         if (!colours.hasOwnProperty("0")) {
@@ -206,9 +218,16 @@ class DisplayInstance implements IOFeed {
 
         this.emptyElem(row);
 
+        if (index == rowNum) {
+            const caretSpan = document.createElement("span");
+            caretSpan.classList.add("caret-span")
+            caretSpan.textContent = (new Array(colNum + 1)).join(" ");
+            row.append(caretSpan);
+        }
+
         parts.map((txt, i) => {
             const span = document.createElement("span");
-            span.textContent = txt;
+            span.textContent = txt.split("").join("\u200B");
             const style = Object.values(colours)[i] || null;
             if (style !== null) {
                 return style.styleSpan(span);
@@ -228,9 +247,34 @@ class DisplayInstance implements IOFeed {
             case "m":
                 rowsAffected = this.addColour(row, column, pass);
                 break;
+            case "j":
+                this.data = [""];
+                this.row = 0;
+                this.column = 0;
+                this.emptyElem(this.container);
+                this.container.append(document.createElement("span"));
+                rowsAffected.push(0);
+                break;
+            case "c":
+                this.column = column + 1;
+                rowsAffected.push(row);
+                break;
+            case "d":
+                this.column = column - 1;
+                rowsAffected.push(row);
+                break;
+            case "k":
+                this.data[row] = this.data[row].substring(0, column);
+                rowsAffected.push(row);
+                break;
+            case "n":
+                this.output(`\u001B[${row};${column}R`);
+                break;
             default:
                 console.log("Unhandled Escape Sequence", sequence);
         }
+        if (this.column < 0) this.column = 0;
+        if (this.column > this.data[row].length) this.column = this.data[row].length;
         return rowsAffected;
     }
 
@@ -248,6 +292,7 @@ class DisplayInstance implements IOFeed {
                     this.container.append(document.createElement("span"));
                     this.row = 0;
                     this.column = 0;
+                    linesAffected.push(r);
                     linesAffected.push(this.data.length - 1);
                 }
                 break;

@@ -45,6 +45,7 @@
             height: 100vh;
             overflow-y: scroll;
             overflow-x: hidden;
+            white-space: pre-wrap;
         }
 
         #main-display>span {
@@ -52,7 +53,7 @@
             font-weight: bold;
             display: block;
             color: #fff;
-            white-space: pre;
+            /* white-space: pre; */
         }
 
         @keyframes borderBlink {
@@ -67,9 +68,21 @@
             }
         }
 
+        /* 
         #main-display span:last-child span:last-child {
             border-right: white solid 1px;
             animation: borderBlink 1s step-end infinite;
+        } */
+
+        .caret-span {
+            position: absolute;
+            /* background-color: #FFF4; */
+            border-right: white solid 1px;
+            animation: borderBlink 1s step-end infinite;
+        }
+
+        body {
+            overflow: hidden;
         }
 
         /* #main-display>span>span {
