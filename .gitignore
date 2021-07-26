@@ -1,5 +1,6 @@
 .vscode
 node_modules
-dist
-disto
+/dist/*
 !dist/index.html
+!dist/root
+dist/root/bin

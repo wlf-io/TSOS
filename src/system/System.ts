@@ -1,26 +1,33 @@
 import { UserIdent } from "./UserIdent";
 import { FileSystemHandle, PathResolver } from "./FileSystem";
-import { iProcessInstance, iProcess, iSystem, IOFeed, iOutput } from "../interfaces/SystemInterfaces";
+import { iProcess, iSystem, IOFeed, iFileSystem } from "../interfaces/SystemInterfaces";
 import Display from "./Display";
+import Process from "./Process";
 
 
 export class SystemHandle implements iSystem {
     public readonly PathResolver = PathResolver;
 
     private _user: UserIdent;
-    private fs: FileSystemHandle;
+    private fs: iFileSystem;
 
-    constructor(user: UserIdent) {
+    constructor(user: UserIdent, fs: iFileSystem | null = null) {
         this._user = user;
-        this.fs = new FileSystemHandle(this.user);
+        this.fs = fs || new FileSystemHandle(this.user);
     }
 
     public get user(): UserIdent {
         return this._user;
     }
 
-    public get fileSystem(): FileSystemHandle {
+    public get fileSystem(): iFileSystem {
         return this.fs;
+    }
+
+    public clone(): iSystem {
+        const user = this.user.clone();
+        const fs = this.fs.clone(user);
+        return new SystemHandle(user, fs);
     }
 
     public createSystemHandle(name: string, pass: string | null = null): SystemHandle {
@@ -37,90 +44,39 @@ export class SystemHandle implements iSystem {
         }
         throw "User Not found";
     }
+
+    public createProcess(bin: string, creator: iProcess): iProcess {
+        return System.createProcess(bin, this, creator);
+    }
 }
 
-export class Process implements iProcess {
-    private _pid: number;
-    private _system: SystemHandle;
-    private _binary: iProcessInstance;
-    private _parent: Process | null = null;
-    private running: boolean = false;
-    private _instance: iProcessInstance;
-
-    constructor(pid: number, system: SystemHandle, binary: any, parent: Process | null = null) {
-        this._pid = pid;
-        this._system = system;
-        this._binary = binary;
-        this._parent = parent;
-        //@ts-ignore
-        this._instance = new this._binary(this);
-    }
-    kill(): void {
-        this.instance.kill();
-    }
-
-    hookOut(hook: IOFeed, ident: string | null = null): void {
-        this.instance.hookOut(hook, ident);
-    }
-    input(input: iOutput, ident: string | null = null): void {
-        this.instance.input(input, ident);
-    }
-
-    public get system(): SystemHandle {
-        return this._system;
-    }
-
-    public get user(): UserIdent {
-        return this.system.user;
-    }
-
-    public get pid(): number {
-        return this._pid;
-    }
-
-    public get instance(): iProcessInstance {
-        return this._instance;
-    }
-
-    public get parent(): Process | null {
-        return this._parent;
-    }
-
-    public get fileSystem(): FileSystemHandle {
-        return this.system.fileSystem;
-    }
-
-    public run(args: string[]): Promise<iOutput> {
-        if (this.running) throw "already running";
-        this.running = true;
-        return this.instance.run(args);
-    }
-
-    public createProcess(location: string): Process {
-        const bin = this.fileSystem.read(location);
-        const proc = System.createProcess(bin, this.system, this);
-        return proc;
-    }
-}
+const EVAL = window.eval;
+window.eval = (...args) => console.log("Eval Attempted", args);
 
 export class System {
     private static processCount: number = 0;
     private static inputHooks: IOFeed[] = [];
 
-    public static createProcess(bin: string, system: SystemHandle, creator: Process | null): Process {
-        const next = eval(bin).default || null;
+    public static createProcess(bin: string, system: iSystem, creator: iProcess | null): iProcess {
+        const next = EVAL(bin).default || null;
         System.processCount++;
-        return new Process(System.processCount, system, next, creator);
+        return new Process(System.processCount, system.clone(), next, creator);
     }
 
     public static setup(system: iSystem) {
         return fetch("/bin.json")
             .then(response => response.json())
             .then(json => {
-                console.group("BIN JSON")
                 Object.entries(json).forEach(e => {
-                    if (typeof e[1] == "string") {
-                        system.fileSystem.write("/bin/" + e[0], e[1]);
+                    const path = e[0];
+                    const file = e[1] || null;
+                    if (typeof file == "object" && file != null && file.hasOwnProperty("content")) {
+                        //@ts-ignore
+                        system.fileSystem.write(path, file["content"] || "");
+                        //@ts-ignore
+                        const perms = (file["perm"] || "root:root:0755").split(":");
+                        system.fileSystem.chmod(path, perms[2] || "755");
+                        system.fileSystem.chown(path, perms[0] || "root", perms[1] || "root");
                     } else {
                         console.log(e);
                     }
@@ -144,7 +100,7 @@ export class System {
                     System.keyInput(ev);
                     return false;
                 default:
-                    console.log(ev.key);
+                    // console.log(ev.key);
                     break;
             }
         };
@@ -153,6 +109,7 @@ export class System {
                 const shell = rootSysHandle.fileSystem.read("/bin/shell");
                 const guest = new UserIdent("guest", ["guest"]);
                 const guestSysHandle = new SystemHandle(guest);
+                guestSysHandle.fileSystem.setCwd("~");
                 const proc = System.createProcess(shell, guestSysHandle, null);
                 Display.hookOut(proc);
                 System.hookInput(proc);

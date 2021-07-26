@@ -1,6 +1,8 @@
 export interface iSystem {
     fileSystem: iFileSystem;
     user: iUserIdent;
+    clone(): iSystem;
+    createProcess(bin: string, creator: iProcess): iProcess;
 }
 
 export interface iUserIdent {
@@ -10,10 +12,22 @@ export interface iUserIdent {
     getEnv(key: string): string;
     setEnv(key: string, value: string): void;
     getEnvEntries(): [string, string][];
+    clone(): iUserIdent;
+}
+
+export interface iFAccess {
+    permString: string;
+    longPermString: string;
+    owner: string;
+    group: string;
+    canRead(user:iUserIdent):boolean;
+    canWrite(user:iUserIdent):boolean;
+    canExecute(user:iUserIdent):boolean;
+    getListArray(octet?:boolean):string[];
 }
 
 export interface iFileSystem {
-    read(path: string): string | null;
+    read(path: string): string;
     write(path: string, data: string): void;
     append(path: string, data: string): void;
     prepend(path: string, data: string): void;
@@ -21,9 +35,18 @@ export interface iFileSystem {
     touch(path: string): void;
     isFile(path: string): boolean;
     isDir(path: string): boolean;
+    exists(path: string): boolean;
     cwd: string;
     setCwd(path: string): void;
     resolve(path: string): string;
+    clone(user?: iUserIdent): iFileSystem;
+    canRead(path: string): boolean;
+    canWrite(path: string): boolean;
+    canExecute(path: string): boolean;
+    chmod(path: string, perm: string): void;
+    chown(path: string, user: string, group: string): void;
+    list(path: string, trim?: boolean): string[];
+    getPerm(path: string): iFAccess
 }
 
 export type iOutput = string | string[] | string[][];
@@ -39,6 +62,8 @@ export interface iProcess extends IOFeed {
     kill(): void;
     system: iSystem;
     fileSystem: iFileSystem;
+    createProcess(location: string): iProcess;
+    parent:iProcess|null;
 }
 
 export interface iProcessInstance extends IOFeed {

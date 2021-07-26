@@ -1,33 +1,58 @@
-import { iOutput } from "../interfaces/SystemInterfaces";
+import { iOutput, iProcess } from "../interfaces/SystemInterfaces";
 import BaseApp from "./base/base";
-import ShellLexer from "./shell/ShellLexer";
+import ShellRunner from "./shell/ShellRunner";
 
 export default class shell extends BaseApp {
 
+    private motd: boolean = false;
     private inputStr: string = "";
+    private _hostname: string | null = null;
 
-    input(input: string | string[] | string[][]): void {
+    protected handleFlag(flag: string, _arg: string): boolean {
+        switch (flag.toLowerCase()) {
+            case "motd":
+                this.motd = true;
+                break;
+        }
+        return false;
+    }
+
+    input(input: iOutput, ident: string): void {
+        if (ident == "user") {
+            this.userInput(input);
+        } else {
+            this.output(input);
+        }
+    }
+
+    public get process(): iProcess {
+        return this.proc;
+    }
+
+    private userInput(input: iOutput): void {
         switch (input) {
             case "Enter":
                 this.output("\u001B[0m");
                 this.output("\n");
                 if (this.inputStr.length) {
-                    this.output(JSON.stringify(ShellLexer.createFromString(this.inputStr).all().map(t => t.value)));
-                    this.output("\n");
                     this.system.fileSystem.append("~/.shell_history", this.inputStr + "\n");
-                    if (this.inputStr === "history") {
-                        this.output(this.system.fileSystem.read("~/.shell_history") || "");
-                    }
+                    const runner = new ShellRunner(this, this.inputStr, "shell_exec");
+                    runner.run()
+                        .then(() => {
+                            this.inputStr = "";
+                            this.output("\n");
+                            this.prompt();
+                        });
+
+                } else {
+                    this.prompt();
                 }
-                this.prompt();
-                this.inputStr = "";
                 break;
             case "Tab":
                 this.inputStr += "\t";
                 this.output("\t");
                 break;
             case "Backspace":
-                // "\ch"
                 if (this.inputStr.length > 0) {
                     this.inputStr = this.inputStr.substring(0, this.inputStr.length - 1);
                     this.output("\b");
@@ -42,36 +67,34 @@ export default class shell extends BaseApp {
         }
     }
 
-    run(args: string[]): Promise<iOutput> {
-        if ((args[0] || "") == "--motd") {
-            this.output([[this.proc.pid.toString(), ...args]]);
-            this.output("\n");
+    start(args: string[]): void {
+        if (this.motd) {
+            this.proc.createProcess("/bin/hostname")
+                .run(args)
+                .then(() => {
+                    this.output("\n");
+                    this.prompt();
+                });
+
+        } else {
+            this.prompt();
         }
-        //console.log(this.proc.pid, args);
-        // this.output([[this.proc.pid.toString(), ...args]]);
-        // this.output("🎨FF0;");
-        // this.output(["RAAAAAAA\nAAAA\tA\tAAAA"]);
-        // this.output("1");
-        // this.output("🎨F00;");
-        // this.output("🎨BG-00F;");
-        // this.output("2");
-        // this.output("🎨reset;");
-        // this.output("3");
-        // this.output("4");
-        // this.output("5\n");
-        this.prompt();
-        return this.endPromise.promise;
     }
 
     private prompt(): void {
-        this.output([
-            "\u001B[0m",
-            "\u001B[32m",
-            `${this.system.user.name}@${this.hostname}`,
-            "\u001B[0m:\u001B[34m",
-            `${this.path}`,
-            "\u001B[0m$ ",
-        ].join(""));
+        this.getHostname()
+            .catch(r => `[hostname error: ${r}]`)
+            .then(host => {
+                this.output([
+                    "\u001B[0m",
+                    "\u001B[32m",
+                    `${this.system.user.name}@${host}`,
+                    "\u001B[0m:\u001B[34m",
+                    `${this.path}`,
+                    "\u001B[0m$ ",
+                ].join(""));
+            });
+
     }
 
     private get path(): string {
@@ -84,8 +107,17 @@ export default class shell extends BaseApp {
         return path;
     }
 
-    private get hostname(): string {
-        return "wlf.io";
+    private async getHostname(): Promise<string> {
+        if (this._hostname == null) {
+            const host = await this.proc.createProcess("hostname")
+                .run([]);
+            if (typeof host == "string") {
+                this._hostname = host;
+            } else {
+                console.log("hostname", host);
+            }
+        }
+        return this._hostname || "";
     }
 
 }

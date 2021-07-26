@@ -1,5 +1,4 @@
-import { iFileSystem } from "../interfaces/SystemInterfaces";
-import { UserIdent } from "./UserIdent";
+import { iFAccess, iFileSystem, iUserIdent } from "../interfaces/SystemInterfaces";
 
 const _setItem = Storage.prototype.setItem;
 
@@ -17,25 +16,38 @@ export enum FSPerm {
     read = 4,
 }
 
-export class FSAccess {
-    private owner: string;
-    private group: string;
+export class FSAccess implements iFAccess {
+    private _owner: string;
+    private _group: string;
     private perms: { [k: string]: number } = {
         user: 0,
         group: 0,
         other: 0,
     };
     constructor(perm: string, owner: string, group: string) {
-        if (perm.length < 3 || perm.length > 4) throw "perm must be in 777 or 0777 format";
-        this.perms.other = parseInt(perm.substr(perm.length - 1, 1));
-        this.perms.group = parseInt(perm.substr(perm.length - 2, 1));
-        this.perms.user = parseInt(perm.substr(perm.length - 3, 1));
-        this.owner = owner;
-        this.group = group;
+        this.setPerm(perm);
+        this._owner = owner;
+        this._group = group;
     }
 
     public get permString(): string {
         return `0${this.perms.user}${this.perms.group}${this.perms.other}`;
+    }
+
+    public get longPermString(): string {
+        return [
+            this.permToLongString(this.perms.user),
+            this.permToLongString(this.perms.group),
+            this.permToLongString(this.perms.other),
+        ].join("");
+    }
+
+    private permToLongString(perm: number) {
+        return [
+            this.permTest(perm, FSPerm.read) ? "r" : "-",
+            this.permTest(perm, FSPerm.write) ? "w" : "-",
+            this.permTest(perm, FSPerm.execute) ? "x" : "-",
+        ].join("");
     }
 
     public static fromAccessString(str: string): FSAccess {
@@ -46,29 +58,62 @@ export class FSAccess {
         throw "Invalid Access String";
     }
 
+    public getListArray(octet: boolean = false): string[] {
+        return [
+            octet ? this.permString : this.longPermString,
+            "0",
+            this.owner,
+            this.group,
+            "0"
+        ];
+    }
+
+    public get owner(): string {
+        return this._owner;
+    }
+
+    public get group(): string {
+        return this._group;
+    }
+
+    public setOwner(owner: string): void {
+        this._owner = owner;
+    }
+
+    public setGroup(group: string): void {
+        this._group = group;
+    }
+
+    public setPerm(perm: string) {
+        if (!/^[0-7]{3,4}$/.test(perm)) throw "perm must be in 777 or 0777 format";
+        this.perms.other = parseInt(perm.substr(perm.length - 1, 1));
+        this.perms.group = parseInt(perm.substr(perm.length - 2, 1));
+        this.perms.user = parseInt(perm.substr(perm.length - 3, 1));
+    }
+
     public toString(): string {
         return `${this.owner}:${this.group}:${this.permString}`;
     }
 
-    private getUserLevel(user: UserIdent): "user" | "group" | "other" {
+    private getUserLevel(user: iUserIdent): "user" | "group" | "other" {
         if (this.owner == user.name) return "user";
         if (user.groups.includes(this.group)) return "group";
         return "other";
     }
 
-    public userCanRead(user: UserIdent): boolean {
+    public canRead(user: iUserIdent): boolean {
         return this.userHasPerm(user, FSPerm.read);
     }
 
-    public userCanWrite(user: UserIdent): boolean {
+    public canWrite(user: iUserIdent): boolean {
         return this.userHasPerm(user, FSPerm.write);
     }
 
-    public userCanExecute(user: UserIdent): boolean {
+    public canExecute(user: iUserIdent): boolean {
         return this.userHasPerm(user, FSPerm.execute);
     }
 
-    private userHasPerm(user: UserIdent, perm: FSPerm): boolean {
+    private userHasPerm(user: iUserIdent, perm: FSPerm): boolean {
         switch (this.getUserLevel(user)) {
             case "user":
                 if (this.permTest(this.perms.user, perm)) return true;
@@ -163,11 +208,18 @@ class FPath {
 
 export class FileSystemHandle implements iFileSystem {
     private _cwd: string = "/";
-    private user: UserIdent;
+    private user: iUserIdent;
     private fs: FileSystem;
-    constructor(user: UserIdent) {
+    constructor(user: iUserIdent) {
         this.user = user;
         this.fs = new FileSystem();
+    }
+
+    public clone(user?: iUserIdent): FileSystemHandle {
+        user = user || this.user.clone();
+        const fs = new FileSystemHandle(user);
+        fs.setCwd(this.cwd);
+        return fs;
     }
 
     public write(path: string | FPath, data: string) {
@@ -213,10 +265,7 @@ export class FileSystemHandle implements iFileSystem {
     }
 
     public resolve(path: string): string {
-        console.log("Resolve", path);
         const p = PathResolver.resolve(path, this.cwd, this.user.name);
-
-        console.log("Resolve", path, p);
         return p;
     }
 
@@ -250,6 +299,12 @@ export class FileSystemHandle implements iFileSystem {
         }
     }
 
+    private executeCheck(path: FPath): void {
+        if (!this.canExecute(path)) {
+            throw `${path} is not executable [EC]`;
+        }
+    }
+
     public canRead(path: string | FPath): boolean {
         path = this.ensureFPath(path);
         if (path.isRoot) return true;
@@ -257,7 +312,7 @@ export class FileSystemHandle implements iFileSystem {
             console.log("READ NOT EXIST");
             return false;
         }
-        return this.fs.getPerm(path).userCanRead(this.user);
+        return this.fs.getPerm(path).canRead(this.user);
     }
 
     public canWrite(path: string | FPath): boolean {
@@ -265,7 +320,7 @@ export class FileSystemHandle implements iFileSystem {
         if (!this.exists(path)) {
             return false
         }
-        return this.fs.getPerm(path).userCanWrite(this.user);
+        return this.fs.getPerm(path).canWrite(this.user);
     }
 
     public canExecute(path: string | FPath): boolean {
@@ -274,7 +329,7 @@ export class FileSystemHandle implements iFileSystem {
         if (!this.exists(path)) {
             return false
         }
-        return this.fs.getPerm(path).userCanExecute(this.user);
+        return this.fs.getPerm(path).canExecute(this.user);
     }
 
     public exists(path: string | FPath): boolean {
@@ -284,7 +339,7 @@ export class FileSystemHandle implements iFileSystem {
             return false;
         }
         const perm = this.fs.getPerm(path.parent);
-        if (!perm.userCanRead(this.user)) {
+        if (!perm.canRead(this.user)) {
             console.log(`EXISTS PARENT NOT PERM ${perm}`);
             return false;
         }
@@ -327,17 +382,52 @@ export class FileSystemHandle implements iFileSystem {
         this._cwd = path.path;
         this.user.setEnv("cwd", path.path);
     }
+
+    public chmod(path: string | FPath, perm: string) {
+        path = this.ensureFPath(path);
+        this.writeCheck(path);
+        const access = this.fs.getPerm(path);
+        access.setPerm(perm);
+        this.fs.setPerm(path, access);
+    }
+
+    public chown(path: string | FPath, owner: string, group?: string) {
+        path = this.ensureFPath(path);
+        this.writeCheck(path);
+        const access = this.fs.getPerm(path);
+        access.setOwner(owner);
+        access.setGroup(group || access.group);
+        this.fs.setPerm(path, access);
+    }
+
+    public list(path: string | FPath, trim: boolean = false): string[] {
+        const fpath = this.ensureFPath(path);
+        this.executeCheck(fpath);
+        let items = this.fs.list(fpath);
+        console.log(fpath.path, items);
+        items = items.filter(i => this.canRead(i));
+        if (trim) {
+            items = items.map(key => trim ? key.substr(fpath.path.length + (fpath.path == "/" ? 0 : 1)) : key)
+        }
+        return items;
+    }
+
+    public getPerm(path: string | FPath): iFAccess {
+        path = this.ensureFPath(path);
+        this.readCheck(path);
+        return this.fs.getPerm(path);
+    }
 }
 
 class FileSystem {
     public mkdir(path: FPath, owner: string, group: string | null = null): void {
         this.setType(path, FSType.dir);
-        this.setPerm(path, "755", owner, group);
+        this.setPerm(path, new FSAccess("755", owner, group || owner));
     }
 
     public touch(path: FPath, owner: string, group: string | null = null): void {
         this.setType(path, FSType.file);
-        this.setPerm(path, "644", owner, group);
+        this.setPerm(path, new FSAccess("644", owner, group || owner));
         this.write(path, "");
     }
 
@@ -345,9 +435,8 @@ class FileSystem {
         setItem("FS:T:" + path.path, type);
     }
 
-    public setPerm(path: FPath, perm: string, owner: string, group: string | null = null): void {
-        const access = new FSAccess(perm, owner, group || owner)
-        setItem("FS:P:" + path.path, access.toString());
+    public setPerm(path: FPath, perm: FSAccess): void {
+        setItem("FS:P:" + path.path, perm.toString());
     }
 
     public isType(path: FPath, type: FSType): boolean {
@@ -384,11 +473,12 @@ class FileSystem {
         return FSAccess.fromAccessString(str);
     }
 
-    public getKeys(prefix: string = ""): string[] {
+    public list(path: FPath): string[] {
         return Object.keys(localStorage)
             .filter(key => key.startsWith("FS:T:"))
             .map(key => key.substr(5))
-            .filter(key => key.startsWith(prefix));
+            .filter(key => key.startsWith(path.path + (path.path == "/" ? "" : "/")) && key.length > path.path.length)
+            .filter(key => !key.substr(path.path.length + (path.path == "/" ? 0 : 1)).includes("/"));
     }
 }
 
@@ -403,4 +493,6 @@ enum FSType {
 (new FileSystem()).mkdir(new FPath("/bin", "/", "root"), "root", "root");
 (new FileSystem()).mkdir(new FPath("/home", "/", "root"), "root", "root");
 (new FileSystem()).mkdir(new FPath("/home/guest", "/", "root"), "guest", "guest");
+(new FileSystem()).mkdir(new FPath("/home/wolfgang", "/", "root"), "wolfgang", "wolfgang");
 (new FileSystem()).mkdir(new FPath("/root", "/", "root"), "root", "root");
+(new FileSystem()).mkdir(new FPath("/etc", "/", "root"), "root", "root");

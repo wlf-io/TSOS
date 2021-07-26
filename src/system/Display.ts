@@ -163,7 +163,7 @@ class DisplayInstance implements IOFeed {
         lines.sort();
         lines.forEach(l => {
             const line = this.data[l];
-            console.log("Redraw", l, line);
+            // console.log("Redraw", l, line);
             this.drawLine(line, l);
         });
     }
@@ -256,7 +256,6 @@ class DisplayInstance implements IOFeed {
                 break;
             case "\b":
                 if (row.length > 0) {
-                    console.log(r, row, c, row.substring(0, c - 1), row.substring(c));
                     this.data[r] = row.substring(0, c - 1) + row.substring(c);
                     c--;
                     this.column = c;
@@ -266,7 +265,12 @@ class DisplayInstance implements IOFeed {
                 }
                 break;
             case "\u007F":
-                console.log("delete");
+                if (row.length > 0) {
+                    this.data[r] = row.substring(0, c) + row.substring(c + 1);
+                    linesAffected.push(r);
+                } else {
+                    console.log("handle going back a line");
+                }
                 break;
             case "\t":
                 linesAffected.push(...this.handleChars(char));

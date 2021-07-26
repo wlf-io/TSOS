@@ -1,0 +1,4 @@
+root:x:0:
+sudo:x:1:wolfgang
+wolfgang:x:2:
+guest:x:3:

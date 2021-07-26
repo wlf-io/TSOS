@@ -1,0 +1,11 @@
+{
+    "/etc/shadow": {
+        "perm": "root:root:600"
+    },
+    "/etc/group": {
+        "perm": "root:root:600"
+    },
+    "/etc/passwd": {
+        "perm": "root:root:600"
+    }
+}
