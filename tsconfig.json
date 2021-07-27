@@ -9,6 +9,11 @@
         "noImplicitAny": true,
         "noUnusedLocals": true,
         "noUnusedParameters": true,
-        "esModuleInterop": true
-    }
+        "esModuleInterop": true,
+        "module": "commonjs"
+    },
+    "files": [
+        "src/system/root.ts",
+        "src/bin/shell.ts"
+    ]
 }
