@@ -224,44 +224,44 @@ export class FileSystemHandle implements iFileSystem {
 
     public write(path: string | FPath, data: string) {
         path = this.ensureFPath(path);
-        // console.log(`${this.user.name} : write : ${path}`);
         this.writeCheck(path);
         this.fs.write(path, data);
     }
 
     public append(path: string | FPath, data: string) {
         path = this.ensureFPath(path);
-        // console.log(`${this.user.name} : write : ${path}`);
         this.writeCheck(path);
         this.fs.append(path, data);
     }
 
     public prepend(path: string | FPath, data: string) {
         path = this.ensureFPath(path);
-        // console.log(`${this.user.name} : write : ${path}`);
         this.writeCheck(path);
         this.fs.prepend(path, data);
     }
 
     public mkdir(path: string | FPath) {
         path = this.ensureFPath(path);
-        // console.log(`${this.user.name} : mkdir : ${path}`);
         this.createCheck(path);
         this.fs.mkdir(path, this.user.name);
     }
 
     public touch(path: string | FPath) {
         path = this.ensureFPath(path);
-        // console.log(`${this.user.name} : touch : ${path}`);
         this.createCheck(path);
         this.fs.touch(path, this.user.name);
     }
 
     public read(path: string | FPath): string {
         path = this.ensureFPath(path);
-        // console.log(`${this.user.name} : read : ${path}`);
         this.readCheck(path);
-        return this.fs.read(path);
+        return this.fs.read(path) || "";
+    }
+
+    public delete(path: string | FPath): void {
+        path = this.ensureFPath(path);
+        this.writeCheck(path);
+        this.fs.delete(path);
     }
 
     public resolve(path: string): string {
@@ -448,12 +448,26 @@ class FileSystem {
         return FSType[t as keyof typeof FSType] || null;
     }
 
-    public read(path: FPath): string {
-        return localStorage.getItem("FS:D:" + path.path) || "";
+    public read(path: FPath): string | null {
+        return localStorage.getItem("FS:D:" + path.path);
     }
 
     public write(path: FPath, data: string): void {
         setItem("FS:D:" + path.path, data);
+    }
+
+    public delete(path: FPath): void {
+        const t = this.getType(path);
+        if (t !== null) {
+            setItem(`!FS:T:${path.path}`, t);
+            localStorage.removeItem(`FS:T:${path.path}`);
+            setItem(`!FS:P:${path.path}`, this.getPerm(path).toString());
+            localStorage.removeItem(`FS:P:${path.path}`);
+            if (t == FSType.file) {
+                setItem(`!FS:D:${path.path}`, this.read(path) || "");
+                localStorage.removeItem(`FS:D:${path.path}`);
+            }
+        }
     }
 
     public append(path: FPath, data: string): void {
@@ -473,9 +487,9 @@ class FileSystem {
         return FSAccess.fromAccessString(str);
     }
 
-    public list(path: FPath): string[] {
+    public list(path: FPath, deleted: boolean = false): string[] {
         return Object.keys(localStorage)
-            .filter(key => key.startsWith("FS:T:"))
+            .filter(key => key.startsWith("FS:T:") || (deleted ? key.startsWith("!FS:T:") : false))
             .map(key => key.substr(5))
             .filter(key => key.startsWith(path.path + (path.path == "/" ? "" : "/")) && key.length > path.path.length)
             .filter(key => !key.substr(path.path.length + (path.path == "/" ? 0 : 1)).includes("/"));

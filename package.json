@@ -8,10 +8,8 @@
     "typescript": "^4.3.5"
   },
   "scripts": {
-    "dev": "webpack --mode production",
-    "build": "tsc --project tsconfig.sys.json && tsc --project tsconfig.bin.json",
-    "watch-sys": "tsc --watch --project tsconfig.sys.json",
-    "watch-bin": "tsc --watch --project tsconfig.bin.json",
+    "dev": "webpack --mode development",
+    "build": "webpack --mode production",
     "watch": "webpack watch",
     "server": "http-server dist"
   },
