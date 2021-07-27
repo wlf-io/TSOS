@@ -1,0 +1,98 @@
+<html>
+
+<head>
+    <title>Test</title>
+    <script src="system.js"></script>
+    <style id="color-set">
+        :root {
+            --blue: #3B78FF;
+            --green: #0F0;
+            --red: #F00;
+        }
+    </style>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        span.col-fg-red {
+            color: var(--red);
+        }
+
+        span.col-fg-blue {
+            color: var(--blue);
+        }
+
+        span.col-fg-green {
+            color: var(--green);
+        }
+
+        span.col-bg-red {
+            background-color: var(--red);
+        }
+
+        span.col-bg-green {
+            background-color: var(--green);
+        }
+
+        span.col-bg-blue {
+            background-color: var(--blue);
+        }
+
+        #main-display {
+            background-color: black;
+            width: 100vw;
+            height: 100vh;
+            overflow-y: scroll;
+            overflow-x: hidden;
+            white-space: pre-wrap;
+        }
+
+        #main-display>span {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            display: block;
+            color: #fff;
+            /* white-space: pre; */
+        }
+
+        @keyframes borderBlink {
+
+            from,
+            to {
+                border-color: transparent
+            }
+
+            50% {
+                border-color: white
+            }
+        }
+
+        /* 
+        #main-display span:last-child span:last-child {
+            border-right: white solid 1px;
+            animation: borderBlink 1s step-end infinite;
+        } */
+
+        .caret-span {
+            position: absolute;
+            /* background-color: #FFF4; */
+            border-right: white solid 1px;
+            animation: borderBlink 1s step-end infinite;
+        }
+
+        body {
+            overflow: hidden;
+        }
+
+        /* #main-display>span>span {
+            border: white 1px solid;
+        } */
+    </style>
+</head>
+
+<body>
+    <div id="main-display"></div>
+</body>
+
+</html>
