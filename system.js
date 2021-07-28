@@ -468,10 +468,12 @@ const queueWrite = () => {
 };
 const _getItem = Storage.prototype.getItem;
 const getItem = (key) => {
-    if (_cache.hasOwnProperty(key)) {
-        return _cache[key];
+    if (!_cache.hasOwnProperty(key)) {
+        const get = _getItem.apply(window.localStorage, [key]);
+        if (get != null)
+            _cache[key] = get;
     }
-    return _getItem.apply(window.localStorage, [key]);
+    return _cache[key] || null;
 };
 Storage.prototype.setItem = (_key, _value) => {
     throw "Blocked";
