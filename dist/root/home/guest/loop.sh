@@ -8,10 +8,14 @@ sum loop 1;
 
 echo round $loop;
 
-sleep 1;
+sleep 0.1;
 
 if $loop < 10;
 
 goto start;
+
+else;
+
+echo "Done!!!";
 
 endif;

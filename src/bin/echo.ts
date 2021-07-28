@@ -7,6 +7,7 @@ export default class echo extends BaseApp {
     protected handleFlag(flag: string, _arg: string): boolean {
         switch (flag.toLowerCase()) {
             case "n":
+            case "e":
                 this.newLine = false;
                 break;
         }

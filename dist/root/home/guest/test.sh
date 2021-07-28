@@ -1,5 +1,9 @@
 #!/bin/shell
 
+func say msg;
+    echo $msg;
+endfunc;
+
 echo $PATH;
 
 echo ${pwd};
@@ -10,7 +14,7 @@ echo "123${pwd}xyz";
 
 sleep 1;
 
-echo test;
+say test;
 
 sleep 1;
 
@@ -21,6 +25,8 @@ cd ttt;
 touch -s a;
 touch -s b;
 
-echo "done!!!";
+say "done!!!";
 
+set ls ${ls /bin}
 
+printvar;

@@ -7,10 +7,11 @@ export default class shell extends BaseApp {
 
     private motd: boolean = false;
     private inputStr: string = "";
+    private savedInputStr: string = "";
     // private _hostname: string | null = null;
     private historyIndex: number = -1;
     private column: number = 0;
-    private script: boolean = false;
+    private script: string | null = null;
     private command: boolean = false;
     private test: boolean = false;
 
@@ -18,15 +19,15 @@ export default class shell extends BaseApp {
 
     private shellRunning: ShellRunner | null = null;
 
-    protected handleFlag(flag: string, _arg: string): boolean {
+    protected handleFlag(flag: string, arg: string): boolean {
         switch (flag.toLowerCase()) {
             case "motd":
                 this.motd = true;
                 break;
             case "s":
             case "script":
-                this.script = true;
-                break;
+                this.script = arg;
+                return true;
             case "c":
             case "command":
                 this.command = true;
@@ -48,7 +49,6 @@ export default class shell extends BaseApp {
     }
 
     public end(output: iOutput) {
-        console.log("SHELL END");
         if (this.shellRunning != null) {
             this.shellRunning.end();
             this.shellRunning = null;
@@ -75,7 +75,10 @@ export default class shell extends BaseApp {
                     this.output("\u001B[0m");
                     this.output("\n");
                     if (this.inputStr.length) {
-                        this.system.fileSystem.append("~/.shell_history", this.inputStr + "\n");
+                        this.historyIndex = -1;
+                        if (!this.inputStr.startsWith(" ")) {
+                            this.system.fileSystem.append("~/.shell_history", this.inputStr + "\n");
+                        }
                         this.runInput(this.inputStr)
                             .then(() => {
                                 this.inputStr = "";
@@ -117,22 +120,20 @@ export default class shell extends BaseApp {
         }
     }
 
-    private runInput(input: string): Promise<any> {
+    private async runInput(input: string): Promise<any> {
         const runner = new ShellRunner(this, input, "shell_exec");
+        console.log("RUN INPUT", input);
         runner.test = this.test;
         this.shellRunning = runner;
-        return runner.run()
-            .then(() => {
-                this.shellRunning = null;
-            });
+        await runner.run();
+        this.shellRunning = null;
     }
 
     private addToInput(ch: string) {
         this.inputStr = this.inputStr.substring(0, this.column) + ch + this.inputStr.substring(this.column);
-        if (this.column < this.inputStr.length - 1) {
+        if (this.column < this.inputStr.length - ch.length) {
             this.output("\u001B[K");
             this.output(this.inputStr.substr(this.column));
-            console.log("REST OF LINE", this.inputStr.substr(this.column));
             this.output((new Array(this.inputStr.length - this.column)).join("\u001B[D"));
         } else {
             this.output(ch);
@@ -141,12 +142,34 @@ export default class shell extends BaseApp {
     }
 
     private history(dir: number): void {
-        console.log("history", dir, this.historyIndex + dir);
-        this.output("\u001B[K");
+        if (this.historyIndex < 0) {
+            this.savedInputStr = this.inputStr;
+        }
+        this.historyIndex += dir;
+        let item = "";
+        if (this.historyIndex == -1) {
+            item = this.savedInputStr;
+        }
+        if (this.historyIndex >= 0) {
+            const history = this.system.fileSystem.read("~/.shell_history").trim().split("\n").filter((h, i, a) => {
+                return i < 1 || a[i - 1] != h;
+            });
+            item = history[history.length - this.historyIndex - 1];
+        }
+
+        if (this.historyIndex < -1) this.historyIndex = -1;
+        if (item.length > 0 || this.historyIndex == -1) {
+            this.inputStr = "";
+            this.output((new Array(this.column + 1)).join("\u001B[D"));
+            this.output("\u001B[K");
+            //await this.prompt();
+            this.column = 0;
+            if (item.length > 0) this.addToInput(item);
+        }
+        // 
     }
 
     private nav(dir: number): void {
-        console.log("nav", dir);
         let dirC = "C";
         if (dir < 0) {
             if (this.column == 0) return;
@@ -161,27 +184,26 @@ export default class shell extends BaseApp {
     }
 
     async start(args: string[]) {
+        args.forEach((v, i) => this.setVar((i).toString(), v));
+        this.setVar("ARGC", args.length.toString());
         await this.setup();
-        if (this.script) {
-            const scripts = args.map(a => this.system.fileSystem.read(a));
-            console.log(scripts);
-            await scripts.reduce((p, s) => {
-                return p.then(() => {
-                    return this.runInput(s);
-                });
-            }, Promise.resolve());
+        console.log("START", this.script, this.command, this.motd);
+        if (this.script != null) {
+            const input = this.system.fileSystem.read(this.script);
+            await this.runInput(input);
             this.endOutput("");
         } else if (this.command) {
 
         } else if (this.motd) {
             try {
                 if (this.system.fileSystem.exists("/etc/shell/motd")) {
+                    console.log("MOTD");
                     await this.runInput(this.system.fileSystem.read("/etc/shell/motd"));
-
                 }
             } catch (e) {
 
             }
+            console.log("MOTD PROMPT");
             this.prompt();
         } else {
             this.prompt();
@@ -194,6 +216,7 @@ export default class shell extends BaseApp {
                 const test = this.test;
                 this.test = false;
                 await this.runInput(this.system.fileSystem.read("/etc/shell/profile"));
+                console.log("SETUP");
                 this.test = test;
             }
         } catch (e) {
@@ -203,6 +226,7 @@ export default class shell extends BaseApp {
     }
 
     private async prompt(): Promise<any> {
+        console.log("PROMPT", this.getVar("PS1"), this.system.user.listEnv());
         const p = await this.varReplace(this.getVar("PS1"));
         this.output(p);
 
@@ -231,6 +255,14 @@ export default class shell extends BaseApp {
     //     return this._hostname || "";
     // }
 
+    public listVars(): [string, string][] {
+        const vars = this.system.user.listEnv();
+        const ex = vars.map(v => v[0]);
+        Object.entries(this.vars).filter(v => !ex.includes(v[0]))
+            .forEach(e => vars.push(e));
+        return vars;
+    }
+
     public getVar(name: string): string {
         name = name.toLowerCase();
         let value = "";
@@ -242,9 +274,16 @@ export default class shell extends BaseApp {
         return value;
     }
 
-    public setVar(name: string, value: string): void {
+    public setVar(name: string, value: string): string {
         name = name.toLowerCase();
         this.vars[name] = value;
+        return value;
+    }
+
+    public remVar(name: string): void {
+        if (this.vars.hasOwnProperty(name)) {
+            delete this.vars[name];
+        }
     }
 
     public async varReplace(t: string): Promise<any> {
@@ -271,7 +310,10 @@ export default class shell extends BaseApp {
                         if (varName.length) {
                             const runner = new ShellRunner(this, varName, "shell_exec");
                             runner.out = false;
+                            console.log("VAR REPLCE RUN", varName);
                             const out = await runner.run();
+
+                            console.log("VAR REPLCE RUN OUR", varName, out);
                             o += out;
                         }
                     } else {
@@ -279,7 +321,7 @@ export default class shell extends BaseApp {
                         if (ch == "}") varIsCmdBC--;
                         varName += ch;
                     }
-                } else if (/[a-zA-Z_-]/.test(ch)) {
+                } else if (/[a-zA-Z0-9_-]/.test(ch)) {
                     varName += ch;
                 } else if (varName.length < 1 && ch == "{") {
                     varIsCmd = true;

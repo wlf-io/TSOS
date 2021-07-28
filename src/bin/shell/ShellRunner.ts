@@ -22,6 +22,12 @@ export default class ShellRunner implements IOFeed {
     private block: number = 0;
     private blocks: ShellToken[][] = [];
 
+
+    private funcs: { [k: string]: { block: number, endBlock: number, args: string[] } } = {};
+    private funcStack: { block: number, func: string }[] = [];
+
+
+
     constructor(shell: shell, script: string, ident: string) {
         this.shell = shell;
         this.blocker = new ShellBlocker(script);
@@ -60,13 +66,14 @@ export default class ShellRunner implements IOFeed {
     public async run(): Promise<any> {
         if (this.running) Promise.reject("running");
         this.running = true;
-        this.blocks = this.blocker.getBlocks();
+        this.blocks = this.blocker.getBlocks().filter(b => b.length);
         this.block = 0;
-        console.log("SHELL BLOCKS", this.blocks.map(b => b.map(t => t.raw)));
-        let args: any[] = [];
+        let args: iOutput = [];
         try {
             while (this.block < this.blocks.length) {
-                args = await this.runBlock([...this.blocks[this.block]], args);
+                console.log("RUN BLOCK", [...this.blocks[this.block]]);
+                args = await this.runBlock([...this.blocks[this.block]], this.block);
+                console.log("run");
                 this.block++;
             }
         } catch (e) {
@@ -87,8 +94,8 @@ export default class ShellRunner implements IOFeed {
     //     );
     // }
 
-    private async runBlock(tokes: ShellToken[], _args: any[]): Promise<any> {
-        if (tokes.length < 1) return Promise.resolve();
+    private async runBlock(tokes: ShellToken[], block: number): Promise<iOutput> {
+        if (tokes.length < 1) return Promise.resolve("");
         if (!this.running) return Promise.reject("canceled");
 
         const vtokes = [];
@@ -101,12 +108,12 @@ export default class ShellRunner implements IOFeed {
         if (this.test) {
             this.output(JSON.stringify(tokes.map(t => t.value)) + "\n", "test");
             this.output(JSON.stringify(vtokes) + "\n", "test");
-            return Promise.resolve();
+            return Promise.resolve("");
         }
         const name = vtokes.shift() || "";
 
-        const internal: any = await this.handleInternal(name, vtokes);
-        if (internal !== null) {
+        const internal: any = await this.handleInternal(name, vtokes, block);
+        if (internal !== false) {
             return Promise.resolve(internal);
         }
 
@@ -119,52 +126,142 @@ export default class ShellRunner implements IOFeed {
         // return Promise.resolve();
     }
 
-    private async handleInternal(name: string, args: string[]): Promise<boolean | null> {
-        if (name.startsWith(":")) return Promise.resolve(true);
-        if (name == "goto") return this.goto(args[0] || "");
-        if (name == "endif") return Promise.resolve(true);
-        if (name == "if") return this.conditional(args);
-        if (name == "set") return this.set(args);
-        if (name == "sum") return this.func(args, (a, b) => a + b);
-        if (name == "mult") return this.func(args, (a, b) => a * b);
-        if (name == "div") return this.func(args, (a, b) => a / b);
-        if (name == "sub") return this.func(args, (a, b) => a - b);
-        return Promise.resolve(null);
+    private async handleInternal(name: string, args: string[], block: number): Promise<iOutput | false> {
+        name = name.trim().toLowerCase();
+        if (name.startsWith(":")) return Promise.resolve("");
+        if (name == "goto") return this.goto(args[0] || "", block);
+        if (name == "endif") return Promise.resolve("");
+        if (name == "if") return this.conditional(args, block);
+        if (name == "set") return this.set(args, block);
+        if (name == "len") return this.len(args, block);
+        if (name == "count") return this.count(args, block);
+        if (name == "sum") return this.math(args, (a, b) => a + b, name, block);
+        if (name == "mult") return this.math(args, (a, b) => a * b, name, block);
+        if (name == "div") return this.math(args, (a, b) => a / b, name, block);
+        if (name == "sub") return this.math(args, (a, b) => a - b, name, block);
+        if (name == "mod") return this.math(args, (a, b) => a % b, name, block);
+        if (name == "pow") return this.math(args, (a, b) => a ^ b, name, block);
+        if (name == "printvar") return this.printVar();
+        if (name == "func") return this.registerFunc(args, block);
+        if (this.isFunc(name)) return this.runFunc(name, args, block);
+        if (name == "return") return this.endFunc(args[0] || "", block);
+        if (name == "endfunc") return this.endFunc("", block);
+        return Promise.resolve(false);
     }
 
-    private async goto(label: string): Promise<boolean> {
+    private endFunc(arg: string, block: number) {
+        const stack = this.funcStack.pop();
+        if (stack) {
+            this.block = stack.block;
+        } else {
+            throw `stack error, failed to pop: Line ${this.blocks[block][0].line}\n`;
+        }
+        return arg;
+    }
+
+    private runFunc(name: string, args: string[], block: number) {
+        const func = this.funcs[name];
+        func.args.forEach((a, i) => this.shell.setVar(a, args[i] || ""));
+        this.block = func.block;
+        this.funcStack.push({ block: block, func: name });
+        return "";
+    }
+
+    private isFunc(name: string): boolean {
+        return Object.keys(this.funcs).includes(name);
+    }
+
+    private async registerFunc(args: string[], block: number) {
+        if (args.length < 1) {
+            throw `func must have a name: Line ${this.getBlockStartLine(block)}\n`;
+        }
+        const name = args.shift() || "";
+        const index = this.blocks.findIndex((b, i) => {
+            if (i <= block) return false;
+            const n = (b[0]?.value || "").trim().toLowerCase();
+            if (n == "func") throw `cannot nest funcs: : Line ${this.getBlockStartLine(block)}\n`;
+            return n == "endfunc";
+        });
+        if (index < 1) {
+            throw "func needs endfunc";
+        }
+        this.funcs[name] = { block: block, endBlock: index, args: args };
+        this.block = index;
+        return "";
+    }
+
+    private async printVar(): Promise<string> {
+        this.output([...this.shell.listVars(), []], "printvar");
+        return "";
+    }
+
+    private async goto(label: string, block: number): Promise<string> {
         const index = this.blocks.findIndex(block => {
-            console.log("goto : ", block);
             return (block[0]?.value || "") == `:${label}`;
         });
         if (index < 1) {
-            throw `goto needs label :${label}`;
+            throw `goto needs label :${label}: Line ${this.getBlockStartLine(block)}\n`;
         }
         this.block = index;
-        return true;
+        return "";
     }
 
-    private async func(args: string[], func: (a: number, b: number) => number): Promise<boolean> {
-        if (args.length != 2) {
-            throw "set can only take 2 variables";
+    private async len(args: string[], block: number) {
+        if (![1, 2].includes(args.length)) {
+            throw `len can only take 1 or 2 variables: Line ${this.getBlockStartLine(block)}\n`;
         }
-        const a = parseInt(this.shell.getVar(args[0])) || 0;
-        const b = parseInt(args[1]) || 0;
-        return this.set([args[0], func(a, b).toString()]);
-    }
-
-    private async set(args: string[]): Promise<boolean> {
-        if (args.length != 2) {
-            throw "set can only take 2 variables";
+        if (args.length == 2) {
+            return this.set([args[0], args[1].length.toString()], block);
+        } else {
+            return args[0].length.toString();
         }
-        this.shell.setVar(args[0], args[1]);
-
-        return true;
     }
 
-    private async conditional(args: string[]): Promise<boolean> {
+    private async count(args: string[], block: number) {
+        if (![1, 2].includes(args.length)) {
+            throw `count can only take 1 or 2 variables: Line ${this.getBlockStartLine(block)}\n`;
+        }
+        if (args.length == 2) {
+            return this.set([args[0], this.arrayIffy(args[1]).length.toString()], block);
+        } else {
+            return this.arrayIffy(args[0]).length.toString()
+        }
+    }
+
+    private async math(args: string[], func: (a: number, b: number) => number, name: string, block: number): Promise<string> {
+        if (args.length != 2) {
+            throw `${name} can only take 2 variables: Line ${this.getBlockStartLine(block)}\n`;
+        }
+
+        let a: string | number = args[0] || "0";
+        let isVar: null | string = null;
+        let b: string | number = args[1] || "0";
+
+
+        if (isNaN(parseFloat(a))) {
+            isVar = a;
+            a = this.shell.getVar(a);
+        }
+
+        a = parseInt(a) || 0;
+        b = parseInt(b) || 0;
+        if (isVar == null) {
+            return this.set([args[0], func(a, b).toString()], block);
+        } else {
+            return func(a, b).toString();
+        }
+    }
+
+    private async set(args: string[], block: number): Promise<string> {
+        if (args.length != 2) {
+            throw `set can only take 2 variables: : Line ${this.getBlockStartLine(block)}\n`;
+        }
+        return this.shell.setVar(args[0], args[1]);
+    }
+
+    private async conditional(args: string[], block: number): Promise<string> {
         if (args.length != 3 && args.length != 1) {
-            throw "if can only take 1 or 3 variables";
+            throw `if can only take 1 or 3 variables: Line ${this.getBlockStartLine(block)}\n`;
         }
 
         const a = (args[0]).toString();
@@ -182,13 +279,13 @@ export default class ShellRunner implements IOFeed {
 
             switch (args[1] || "") {
                 case "==":
+                case "=":
                     pass = a == b;
                     break;
                 case "!=":
                     pass = a == b;
                     break;
                 case ">":
-                    console.log("GREATER", intA, intB, intA > intB);
                     pass = intA > intB;
                     break;
                 case ">=":
@@ -200,22 +297,57 @@ export default class ShellRunner implements IOFeed {
                 case "<=":
                     pass = intA <= intB;
                     break;
+                case "is":
+                    pass = this.conditionalIs(a, b, block);
+                    break;
                 default:
-                    throw "Unrecognized operator: " + op;
+                    throw `Unrecognized operator: ${op}: Line ${this.getBlockStartLine(block)}\n`;
             }
         }
 
         if (!pass) {
-            const index = this.blocks.findIndex((block, i) => {
-                return i > this.block && (block[0]?.value || "") == "endif";
+            let depth = 1;
+            const index = this.blocks.findIndex((b, i) => {
+                if (i <= block) return false;
+                const n = (b[0]?.value || "").trim().toLowerCase();
+                if (n == "if") depth++;
+                if (n == "endif" || (depth == 1 && n == "else")) depth--;
+                console.log("test endif|else", n, this.getBlockStartLine(i));
+                return depth < 1 && (n == "endif" || n == "else");
             });
             if (index < 1) {
-                throw "if needs endif";
+                throw `if needs endif: Line ${this.getBlockStartLine(block)}\n`;
             }
             this.block = index;
         }
 
-        return true;
+        return "";
+    }
+
+    private conditionalIs(a: string, b: string, block: number) {
+        switch (b.toLowerCase()) {
+            case "file":
+                return this.shell.process.fileSystem.isFile(a);
+            case "dir":
+                return this.shell.process.fileSystem.isDir(a);
+            case "int":
+                return this.shell.process.fileSystem.isDir(a);
+            case "float":
+                return this.shell.process.fileSystem.isDir(a);
+            default:
+                throw `Invlaid is param ${b}: Line ${this.getBlockStartLine(block)}\n`;
+        }
+    }
+
+    private getBlockStartLine(block: number): number {
+        return (this.blocks[block][0]?.line) || -1;
+    }
+
+    private arrayIffy(arg: string): string[] {
+        console.log("ARRAYIFFY", JSON.stringify(arg));
+        if (arg.includes("\n")) return arg.split("\n");
+        if (arg.includes("\t")) return arg.split("\t");
+        throw "array convert fail";
     }
 
 }

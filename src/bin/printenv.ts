@@ -4,7 +4,7 @@ export default class printenv extends BaseApp {
 
     public start(_args: string[]): void {
         this.endOutput(
-            [...this.system.user.getEnvEntries(), []]
+            [...this.system.user.listEnv(), []]
         );
     }
 }

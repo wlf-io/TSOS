@@ -42,7 +42,7 @@ class DisplayStyle {
 class DisplayInstance implements IOFeed {
 
     private container: HTMLElement;
-    private column: number = -1;
+    private column: number = 0;
     private row: number = 0;
 
     private data: string[] = [""];
@@ -268,11 +268,12 @@ class DisplayInstance implements IOFeed {
                 rowsAffected.push(0);
                 break;
             case "c":
-                this.column = column + 1;
+                this.column++;
                 rowsAffected.push(row);
                 break;
             case "d":
-                this.column = column - 1;
+                this.column--;
+                if (this.column < 0) this.column = 0;
                 rowsAffected.push(row);
                 break;
             case "k":
@@ -281,7 +282,7 @@ class DisplayInstance implements IOFeed {
                 this.colours[row.toString()] = {};
                 Object.entries(cols).filter(e => (parseInt(e[0]) || 0) <= column)
                     .forEach(e => {
-                       this.colours[row][e[0].toString()] = e[1]; 
+                        this.colours[row][e[0].toString()] = e[1];
                     });
                 rowsAffected.push(row);
                 break;
@@ -383,9 +384,7 @@ class DisplayInstance implements IOFeed {
                 } else {
                     row = row.substr(0, this.column) + next + row.substr(this.column + next.length);
                 }
-                if (this.column > -1) {
-                    this.column += next.length;
-                }
+                this.column += next.length;
                 this.data[r] = row;
                 linesAffected.push(r);
                 break;

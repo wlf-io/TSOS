@@ -12,7 +12,7 @@ export interface iUserIdent {
     getEnv(key: string): string;
     setEnv(key: string, value: string): void;
     remEnv(key: string): void;
-    getEnvEntries(): [string, string][];
+    listEnv(): [string, string][];
     clone(): iUserIdent;
 }
 

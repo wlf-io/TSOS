@@ -32,14 +32,18 @@ export default class ls extends BaseApp {
         }
         const result: [string, string[][]][] = args.map(a => [a, this.list(a)]);
         if (result.length == 1) {
-            this.endOutput(result[0][1]);
+            this.output(result[0][1]);
+            this.output("\n");
+            this.end(result[0][1]);
         } else {
             const r2: string[][] = [];
             result.forEach(r => {
                 r2.push([r[0]]);
                 r2.push(...r[1]);
             });
-            this.endOutput(r2);
+            this.output(r2);
+            this.output("\n");
+            this.end(r2);
         }
     }
 
@@ -82,7 +86,6 @@ export default class ls extends BaseApp {
                 return this.colouriseFile(l.substr(res.length + triml), dir, perm);
             })];
         }
-        list.push([]);
         return list;
     }
 

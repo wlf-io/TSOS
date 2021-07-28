@@ -16,5 +16,8 @@
     },
     "/home/guest/loop.sh": {
         "perm": "guest:guest:744"
+    },
+    "/home/guest/fizzbuzz": {
+        "perm": "guest:guest:744"
     }
 }

@@ -31,7 +31,7 @@ export class UserIdent implements iUserIdent {
         this._env[key] = value;
     }
 
-    public getEnvEntries(): [string, string][] {
+    public listEnv(): [string, string][] {
         return Object.entries(this._env);
     }
 
@@ -44,7 +44,7 @@ export class UserIdent implements iUserIdent {
 
     public clone(): UserIdent {
         const user = new UserIdent(this.name, this.groups);
-        this.getEnvEntries().forEach(v => user.setEnv(v[0], v[1]));
+        this.listEnv().forEach(v => user.setEnv(v[0], v[1]));
         return user;
     }
 
