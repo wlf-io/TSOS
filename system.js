@@ -1142,14 +1142,14 @@ class System {
         return new Process_1.default(System.processCount, system.clone(), next, args, creator);
     }
     static setup(system) {
-        return System.loadRoot(system, () => true)
+        return System.loadRoot(system, () => true, true)
             .then(() => {
-            if (location.hostname == "127.0.0.1") {
+            if (System.isDev) {
                 window.setInterval(() => System.loadRoot(system, (s) => s.startsWith("/bin/")), 10000);
             }
         });
     }
-    static async loadRoot(system, filter) {
+    static async loadRoot(system, filter, output = false) {
         const response = await fetch("root.json");
         const txt = await response.text();
         const hashB = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(txt));
@@ -1162,22 +1162,42 @@ class System {
         const json = JSON.parse(txt);
         if (json == null)
             throw "root json is null";
-        Object.entries(json).forEach(e => {
+        if (output)
+            Display_1.default.instance.input("Installing...\n", "setup");
+        for (const e of Object.entries(json)) {
             const path = e[0];
             if (!filter(path))
                 return;
             const file = e[1] || null;
             if (typeof file == "object" && file != null && file.hasOwnProperty("content")) {
+                if (output)
+                    Display_1.default.instance.input(`\t${path}...`, "setup");
+                const len = Math.floor(`${path}...`.length / 8);
+                if (!system.fileSystem.exists(path) && !System.isDev) {
+                    await (new Promise(res => window.setTimeout(() => res(0), 200)));
+                }
                 system.fileSystem.write(path, file["content"] || "");
                 const perms = (file["perm"] || "root:root:0755").split(":");
                 system.fileSystem.chmod(path, perms[2] || "755");
                 system.fileSystem.chown(path, perms[0] || "root", perms[1] || "root");
+                if (output)
+                    Display_1.default.instance.input(`${(new Array(5 - len)).join("\t")}\u001B[32mDone\u001B[0m\n`, "setup");
             }
             else {
                 console.log(e);
             }
-        });
+        }
         console.groupEnd();
+        if (output) {
+            if (!System.isDev) {
+                Display_1.default.instance.input("Complete!!!", "setup");
+                await (new Promise(res => window.setTimeout(() => res(0), 1000)));
+            }
+            Display_1.default.instance.input("\u001B[J", "setup");
+        }
+    }
+    static get isDev() {
+        return location.hostname == "127.0.0.1";
     }
     static boot() {
         const root = new UserIdent_1.UserIdent("root", ["root"]);
