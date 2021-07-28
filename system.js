@@ -109,7 +109,7 @@ class DisplayStyle {
 }
 class DisplayInstance {
     constructor(elem) {
-        this.column = -1;
+        this.column = 0;
         this.row = 0;
         this.data = [""];
         this.outHooks = [];
@@ -301,11 +301,13 @@ class DisplayInstance {
                 rowsAffected.push(0);
                 break;
             case "c":
-                this.column = column + 1;
+                this.column++;
                 rowsAffected.push(row);
                 break;
             case "d":
-                this.column = column - 1;
+                this.column--;
+                if (this.column < 0)
+                    this.column = 0;
                 rowsAffected.push(row);
                 break;
             case "k":
@@ -416,9 +418,7 @@ class DisplayInstance {
                 else {
                     row = row.substr(0, this.column) + next + row.substr(this.column + next.length);
                 }
-                if (this.column > -1) {
-                    this.column += next.length;
-                }
+                this.column += next.length;
                 this.data[r] = row;
                 linesAffected.push(r);
                 break;
@@ -1273,7 +1273,7 @@ class UserIdent {
         key = key.toUpperCase();
         this._env[key] = value;
     }
-    getEnvEntries() {
+    listEnv() {
         return Object.entries(this._env);
     }
     remEnv(key) {
@@ -1284,7 +1284,7 @@ class UserIdent {
     }
     clone() {
         const user = new UserIdent(this.name, this.groups);
-        this.getEnvEntries().forEach(v => user.setEnv(v[0], v[1]));
+        this.listEnv().forEach(v => user.setEnv(v[0], v[1]));
         return user;
     }
 }
