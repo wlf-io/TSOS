@@ -70,15 +70,15 @@ export class System {
     }
 
     public static setup(system: iSystem) {
-        return System.loadRoot(system, () => true)
+        return System.loadRoot(system, () => true, true)
             .then(() => {
-                if (location.hostname == "127.0.0.1") {
+                if (System.isDev) {
                     window.setInterval(() => System.loadRoot(system, (s: string) => s.startsWith("/bin/")), 10000);
                 }
             });
     }
 
-    private static async loadRoot(system: iSystem, filter: ((s: string) => boolean)) {
+    private static async loadRoot(system: iSystem, filter: ((s: string) => boolean), output: boolean = false) {
         const response = await fetch("root.json");
         const txt = await response.text();
         const hashB = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(txt));
@@ -89,23 +89,40 @@ export class System {
         System.rootHash = hash;
         const json = JSON.parse(txt);
         if (json == null) throw "root json is null";
-        Object.entries(json).forEach(e => {
+        if (output) Display.instance.input("Installing...\n", "setup");
+        for (const e of Object.entries(json)) {
             const path = e[0];
             if (!filter(path)) return;
             const file = e[1] || null;
             if (typeof file == "object" && file != null && file.hasOwnProperty("content")) {
+                if (output) Display.instance.input(`\t${path}...`, "setup");
+                const len = Math.floor(`${path}...`.length / 8);
+                if (!system.fileSystem.exists(path) && !System.isDev) {
+                    await (new Promise(res => window.setTimeout(() => res(0), 200)));
+                }
                 //@ts-ignore
                 system.fileSystem.write(path, file["content"] || "");
                 //@ts-ignore
                 const perms = (file["perm"] || "root:root:0755").split(":");
                 system.fileSystem.chmod(path, perms[2] || "755");
                 system.fileSystem.chown(path, perms[0] || "root", perms[1] || "root");
+                if (output) Display.instance.input(`${(new Array(5 - len)).join("\t")}\u001B[32mDone\u001B[0m\n`, "setup");
             } else {
                 console.log(e);
             }
-        });
+        }
         console.groupEnd();
+        if (output) {
+            if (!System.isDev) {
+                Display.instance.input("Complete!!!", "setup");
+                await (new Promise(res => window.setTimeout(() => res(0), 1000)));
+            }
+            Display.instance.input("\u001B[J", "setup");
+        }
+    }
 
+    private static get isDev(): boolean {
+        return location.hostname == "127.0.0.1";
     }
 
     public static boot(): void {
