@@ -79,7 +79,7 @@ export class System {
     }
 
     private static async loadRoot(system: iSystem, filter: ((s: string) => boolean)) {
-        const response = await fetch("/root.json");
+        const response = await fetch("root.json");
         const txt = await response.text();
         const hashB = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(txt));
         const hashA = Array.from(new Uint8Array(hashB));
