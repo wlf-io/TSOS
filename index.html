@@ -5,9 +5,14 @@
     <script src="system.js"></script>
     <style id="color-set">
         :root {
-            --blue: #3B78FF;
-            --green: #0F0;
+            --black: #000;
             --red: #F00;
+            --green: #0F0;
+            --yellow: #FF0;
+            --blue: #3B78FF;
+            --purple: #A0F;
+            --cyan: #0FF;
+            --white: #CCC;
         }
     </style>
     <style>
@@ -15,16 +20,40 @@
             margin: 0;
         }
 
+        span.col-fg-black {
+            color: var(--black);
+        }
+
         span.col-fg-red {
             color: var(--red);
+        }
+
+        span.col-fg-green {
+            color: var(--green);
+        }
+
+        span.col-fg-yellow {
+            color: var(--yellow);
         }
 
         span.col-fg-blue {
             color: var(--blue);
         }
 
-        span.col-fg-green {
-            color: var(--green);
+        span.col-fg-purple {
+            color: var(--purple);
+        }
+
+        span.col-fg-cyan {
+            color: var(--cyan);
+        }
+
+        span.col-fg-white {
+            color: var(--white);
+        }
+
+        span.col-bg-black {
+            background-color: var(--black);
         }
 
         span.col-bg-red {
@@ -35,8 +64,24 @@
             background-color: var(--green);
         }
 
+        span.col-bg-yellow {
+            background-color: var(--yellow);
+        }
+
         span.col-bg-blue {
             background-color: var(--blue);
+        }
+
+        span.col-bg-purple {
+            background-color: var(--purple);
+        }
+
+        span.col-bg-cyan {
+            background-color: var(--cyan);
+        }
+
+        span.col-bg-white {
+            background-color: var(--white);
         }
 
         #main-display {
@@ -52,7 +97,8 @@
             font-family: 'Courier New', Courier, monospace;
             font-weight: bold;
             display: block;
-            color: #fff;
+            color: var(--white);
+            min-height: 1rem;
             /* white-space: pre; */
         }
 
@@ -60,11 +106,11 @@
 
             from,
             to {
-                border-color: transparent
+                border-color: white
             }
 
             50% {
-                border-color: white
+                border-color: transparent
             }
         }
 

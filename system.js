@@ -118,6 +118,9 @@ class DisplayInstance {
         this.emptyElem(this.container);
         this.container.append(document.createElement("span"));
     }
+    end(_input) {
+        throw new Error("Method not implemented.");
+    }
     hookOut(hook, ident) {
         this.outHooks.push([hook, ident]);
     }
@@ -188,6 +191,11 @@ class DisplayInstance {
         }
         else {
             style.f = colour;
+        }
+        if (col === "0") {
+            style.f = "reset";
+            style.b = "reset";
+            style.s = "reset";
         }
         this.colours[`${row}`][`${column}`] = style;
         return [row];
@@ -284,7 +292,10 @@ class DisplayInstance {
             case "j":
                 this.data = [""];
                 this.row = 0;
+                row = 0;
+                column = 0;
                 this.column = 0;
+                this.colours = {};
                 this.emptyElem(this.container);
                 this.container.append(document.createElement("span"));
                 rowsAffected.push(0);
@@ -299,6 +310,12 @@ class DisplayInstance {
                 break;
             case "k":
                 this.data[row] = this.data[row].substring(0, column);
+                const cols = this.colours[row.toString()] || {};
+                this.colours[row.toString()] = {};
+                Object.entries(cols).filter(e => (parseInt(e[0]) || 0) <= column)
+                    .forEach(e => {
+                    this.colours[row][e[0].toString()] = e[1];
+                });
                 rowsAffected.push(row);
                 break;
             case "n":
@@ -424,8 +441,37 @@ class DisplayInstance {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.FileSystemHandle = exports.PathResolver = exports.FSAccess = exports.FSPerm = void 0;
 const _setItem = Storage.prototype.setItem;
+const _cache = {};
+let _cachePending = [];
 const setItem = (key, value) => {
-    return _setItem.apply(window.localStorage, [key, value]);
+    _cache[key] = value;
+    _cachePending.push(key);
+    _cachePending = [...(new Set(_cachePending))];
+    queueWrite();
+};
+let writeTick = null;
+const queueWrite = () => {
+    if (writeTick !== null)
+        return;
+    writeTick = window.setTimeout(() => {
+        if (_cachePending.length > 0) {
+            const key = _cachePending.shift();
+            if (key) {
+                _setItem.apply(window.localStorage, [key, _cache[key]]);
+            }
+        }
+        writeTick = null;
+        if (_cachePending.length > 0) {
+            queueWrite();
+        }
+    }, 100);
+};
+const _getItem = Storage.prototype.getItem;
+const getItem = (key) => {
+    if (_cache.hasOwnProperty(key)) {
+        return _cache[key];
+    }
+    return _getItem.apply(window.localStorage, [key]);
 };
 Storage.prototype.setItem = (_key, _value) => {
     throw "Blocked";
@@ -437,15 +483,22 @@ var FSPerm;
     FSPerm[FSPerm["read"] = 4] = "read";
 })(FSPerm = exports.FSPerm || (exports.FSPerm = {}));
 class FSAccess {
-    constructor(perm, owner, group) {
+    constructor(perm, owner, group, accessTime, modifyTime, changeTime, createTime) {
         this.perms = {
             user: 0,
             group: 0,
             other: 0,
         };
+        this.accessUndefined = false;
         this.setPerm(perm);
         this._owner = owner;
         this._group = group;
+        if (accessTime === undefined)
+            this.accessUndefined = true;
+        this.accessTime = accessTime || (Date.now() / 1000 | 0);
+        this.modifyTime = modifyTime || (Date.now() / 1000 | 0);
+        this.changeTime = changeTime || (Date.now() / 1000 | 0);
+        this.createTime = createTime || (Date.now() / 1000 | 0);
     }
     get permString() {
         return `0${this.perms.user}${this.perms.group}${this.perms.other}`;
@@ -466,19 +519,13 @@ class FSAccess {
     }
     static fromAccessString(str) {
         const parts = str.split(":");
-        if (parts.length == 3) {
+        if (parts.length > 3) {
+            return new FSAccess(parts[2], parts[0], parts[1], parseInt(parts[3]) || undefined, parseInt(parts[4]) || undefined, parseInt(parts[5]) || undefined, parseInt(parts[6]) || undefined);
+        }
+        else if (parts.length == 3) {
             return new FSAccess(parts[2], parts[0], parts[1]);
         }
-        throw "Invalid Access String";
-    }
-    getListArray(octet = false) {
-        return [
-            octet ? this.permString : this.longPermString,
-            "0",
-            this.owner,
-            this.group,
-            "0"
-        ];
+        throw "Invalid Access String: " + str;
     }
     get owner() {
         return this._owner;
@@ -500,10 +547,10 @@ class FSAccess {
         this.perms.user = parseInt(perm.substr(perm.length - 3, 1));
     }
     toString() {
-        return `${this.owner}:${this.group}:${this.permString}`;
+        return `${this.owner}:${this.group}:${this.permString}:${this.accessTime}:${this.modifyTime}:${this.changeTime}:${this.createTime}`;
     }
     getUserLevel(user) {
-        if (this.owner == user.name)
+        if (this.owner == user.name || user.name == "root")
             return "user";
         if (user.groups.includes(this.group))
             return "group";
@@ -568,6 +615,18 @@ class PathResolver {
                 out.push(p);
         });
         return "/" + out.filter(i => i.length > 0).join("/");
+    }
+    static abreviate(path, cwd, username) {
+        path = PathResolver.resolve(path, cwd, username);
+        if (username == "root") {
+            if (path.startsWith("/root/") || path == "/root") {
+                path = "~" + path.substr("/root".length);
+            }
+        }
+        else if (path.startsWith(`/home/${username}/`) || path == `/home/${username}`) {
+            path = "~" + path.substr(`/root/${username}`.length);
+        }
+        return path;
     }
 }
 exports.PathResolver = PathResolver;
@@ -655,6 +714,10 @@ class FileSystemHandle {
     resolve(path) {
         const p = PathResolver.resolve(path, this.cwd, this.user.name);
         return p;
+    }
+    abreviate(path) {
+        path = this.ensureFPath(path);
+        return PathResolver.abreviate(path.path, this.cwd, this.user.name);
     }
     createCheck(path) {
         if (!this.canRead(path.parent)) {
@@ -778,7 +841,6 @@ class FileSystemHandle {
         const fpath = this.ensureFPath(path);
         this.executeCheck(fpath);
         let items = this.fs.list(fpath);
-        console.log(fpath.path, items);
         items = items.filter(i => this.canRead(i));
         if (trim) {
             items = items.map(key => trim ? key.substr(fpath.path.length + (fpath.path == "/" ? 0 : 1)) : key);
@@ -812,40 +874,53 @@ class FileSystem {
         return this.getType(path) == type;
     }
     getType(path) {
-        const t = localStorage.getItem("FS:T:" + path.path) || "";
+        const t = getItem("FS:T:" + path.path) || "";
         return FSType[t] || null;
     }
     read(path) {
-        return localStorage.getItem("FS:D:" + path.path);
+        const res = getItem("FS:D:" + path.path);
+        if (res != null) {
+            const perm = this.getPerm(path);
+            perm.accessTime = (Date.now() / 1000 | 0);
+            this.setPerm(path, perm);
+        }
+        return res;
     }
     write(path, data) {
         setItem("FS:D:" + path.path, data);
+        const perm = this.getPerm(path);
+        perm.modifyTime = (Date.now() / 1000 | 0);
+        this.setPerm(path, perm);
     }
     delete(path) {
         const t = this.getType(path);
         if (t !== null) {
             setItem(`!FS:T:${path.path}`, t);
             localStorage.removeItem(`FS:T:${path.path}`);
-            setItem(`!FS:P:${path.path}`, this.getPerm(path).toString());
-            localStorage.removeItem(`FS:P:${path.path}`);
             if (t == FSType.file) {
                 setItem(`!FS:D:${path.path}`, this.read(path) || "");
                 localStorage.removeItem(`FS:D:${path.path}`);
             }
+            setItem(`!FS:P:${path.path}`, this.getPerm(path).toString());
+            localStorage.removeItem(`FS:P:${path.path}`);
         }
     }
     append(path, data) {
-        setItem("FS:D:" + path.path, this.read(path) + data);
+        this.write(path, this.read(path) + data);
     }
     prepend(path, data) {
-        setItem("FS:D:" + path.path, data + this.read(path));
+        this.write(path, data + this.read(path));
     }
     exists(path) {
         return this.getType(path) != null;
     }
     getPerm(path) {
-        const str = localStorage.getItem("FS:P:" + path.path) || "";
-        return FSAccess.fromAccessString(str);
+        const str = getItem("FS:P:" + path.path) || "";
+        const perm = FSAccess.fromAccessString(str);
+        if (perm.accessUndefined) {
+            this.setPerm(path, perm);
+        }
+        return perm;
     }
     list(path, deleted = false) {
         return Object.keys(localStorage)
@@ -869,6 +944,7 @@ var FSType;
 (new FileSystem()).mkdir(new FPath("/home/wolfgang", "/", "root"), "wolfgang", "wolfgang");
 (new FileSystem()).mkdir(new FPath("/root", "/", "root"), "root", "root");
 (new FileSystem()).mkdir(new FPath("/etc", "/", "root"), "root", "root");
+(new FileSystem()).mkdir(new FPath("/etc/shell", "/", "root"), "root", "root");
 
 
 /***/ }),
@@ -879,13 +955,14 @@ var FSType;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 class Process {
-    constructor(pid, system, binary, parent = null) {
+    constructor(pid, system, binary, args, parent = null) {
         var _a;
         this._parent = null;
         this._pid = pid;
         this._system = system;
         this._binary = binary;
         this._parent = parent;
+        this.args = args;
         try {
             this._instance = new this._binary(this);
         }
@@ -895,13 +972,22 @@ class Process {
         }
     }
     kill() {
-        this.instance.kill();
+        var _a;
+        (_a = this.instance) === null || _a === void 0 ? void 0 : _a.kill();
+        this._instance = null;
+    }
+    end(input) {
+        var _a;
+        (_a = this._instance) === null || _a === void 0 ? void 0 : _a.end(input);
+        this._instance = null;
     }
     hookOut(hook, ident = null) {
-        this.instance.hookOut(hook, ident);
+        var _a;
+        (_a = this.instance) === null || _a === void 0 ? void 0 : _a.hookOut(hook, ident);
     }
     input(input, ident = null) {
-        this.instance.input(input, ident);
+        var _a;
+        (_a = this.instance) === null || _a === void 0 ? void 0 : _a.input(input, ident);
     }
     get system() {
         return this._system;
@@ -921,26 +1007,38 @@ class Process {
     get fileSystem() {
         return this.system.fileSystem;
     }
-    run(args) {
-        return this.instance.run(args);
+    run() {
+        var _a;
+        const out = (_a = this.instance) === null || _a === void 0 ? void 0 : _a.run(this.args);
+        return out || Promise.reject("INSTANCE FAILE");
     }
-    createProcess(location) {
+    createProcess(location, args) {
         let bin = null;
-        let loc = location;
-        if (this.fileSystem.exists(location)) {
-            bin = this.fileSystem.read(location);
+        let loc = this.fileSystem.resolve(location);
+        if (this.fileSystem.exists(loc)) {
+            if (location.startsWith("/") || location.startsWith("./")) {
+                bin = this.fileSystem.read(loc);
+            }
         }
-        else {
+        if (bin === null) {
             loc = this.getBinPath(location);
             if (loc != null) {
                 bin = this.fileSystem.read(loc);
             }
         }
         if (bin == null || loc == null)
-            throw `${location} is not a recognized program`;
+            throw `${location} is not a recognized program\n`;
         if (!this.fileSystem.canExecute(loc))
-            throw `${loc} is not executable`;
-        const proc = this.system.createProcess(bin, this);
+            throw `${loc} is not executable\n`;
+        const first = bin.split("\n")[0];
+        if (first.startsWith("#!")) {
+            const handler = first.substr(2).trim().split(" ");
+            const app = handler.shift() || "";
+            if ((app === null || app === void 0 ? void 0 : app.length) > 0) {
+                return this.createProcess(app, [...handler, "-s", loc, ...args]);
+            }
+        }
+        const proc = this.system.createProcess(bin, args, this);
         return proc;
     }
     getBinPath(name) {
@@ -960,6 +1058,9 @@ class Process {
 }
 exports.default = Process;
 class DummyProc {
+    end(_input) {
+        throw new Error("Method not implemented.");
+    }
     run(_args) {
         return Promise.resolve("");
     }
@@ -1019,45 +1120,68 @@ class SystemHandle {
         }
         throw "User Not found";
     }
-    createProcess(bin, creator) {
-        return System.createProcess(bin, this, creator);
+    createProcess(bin, args, creator) {
+        return System.createProcess(bin, this, args, creator);
     }
 }
 exports.SystemHandle = SystemHandle;
 const EVAL = window.eval;
 window.eval = (...args) => console.log("Eval Attempted", args);
 class System {
-    static createProcess(bin, system, creator) {
-        const next = EVAL(bin).default || null;
+    static createProcess(bin, system, args, creator) {
+        let next = null;
+        try {
+            next = EVAL(bin).default || null;
+        }
+        catch (e) {
+            throw e.toString() + "\n";
+        }
         System.processCount++;
-        return new Process_1.default(System.processCount, system.clone(), next, creator);
+        return new Process_1.default(System.processCount, system.clone(), next, args, creator);
     }
     static setup(system) {
-        return fetch("/bin.json")
-            .then(response => response.json())
-            .then(json => {
-            Object.entries(json).forEach(e => {
-                const path = e[0];
-                const file = e[1] || null;
-                if (typeof file == "object" && file != null && file.hasOwnProperty("content")) {
-                    system.fileSystem.write(path, file["content"] || "");
-                    const perms = (file["perm"] || "root:root:0755").split(":");
-                    system.fileSystem.chmod(path, perms[2] || "755");
-                    system.fileSystem.chown(path, perms[0] || "root", perms[1] || "root");
-                }
-                else {
-                    console.log(e);
-                }
-            });
-            console.groupEnd();
-            return json;
+        return System.loadRoot(system, () => true)
+            .then(() => {
+            if (location.hostname == "127.0.0.1") {
+                window.setInterval(() => System.loadRoot(system, (s) => s.startsWith("/bin/")), 10000);
+            }
         });
+    }
+    static async loadRoot(system, filter) {
+        const response = await fetch("/root.json");
+        const txt = await response.text();
+        const hashB = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(txt));
+        const hashA = Array.from(new Uint8Array(hashB));
+        const hash = hashA.map(a => a.toString(16).padStart(2, "0")).join("");
+        if (hash == System.rootHash)
+            return;
+        console.log("root changed", hash);
+        System.rootHash = hash;
+        const json = JSON.parse(txt);
+        if (json == null)
+            throw "root json is null";
+        Object.entries(json).forEach(e => {
+            const path = e[0];
+            if (!filter(path))
+                return;
+            const file = e[1] || null;
+            if (typeof file == "object" && file != null && file.hasOwnProperty("content")) {
+                system.fileSystem.write(path, file["content"] || "");
+                const perms = (file["perm"] || "root:root:0755").split(":");
+                system.fileSystem.chmod(path, perms[2] || "755");
+                system.fileSystem.chown(path, perms[0] || "root", perms[1] || "root");
+            }
+            else {
+                console.log(e);
+            }
+        });
+        console.groupEnd();
     }
     static boot() {
         const root = new UserIdent_1.UserIdent("root", ["root"]);
         const rootSysHandle = new SystemHandle(root);
         document.onkeypress = ev => {
-            System.keyInput(ev);
+            System.keyInput(ev.key);
             return false;
         };
         document.onkeydown = ev => {
@@ -1070,12 +1194,14 @@ class System {
                 case "ArrowRight":
                 case "Home":
                 case "End":
-                    System.keyInput(ev);
+                    System.keyInput(ev.key);
                     return false;
-                default:
-                    if (ev.key == "d") {
-                        console.log(ev);
+                case "c":
+                    if (ev.ctrlKey && !ev.altKey && !ev.shiftKey) {
+                        System.keyInput("\u0018");
+                        return false;
                     }
+                default:
                     break;
             }
         };
@@ -1085,22 +1211,32 @@ class System {
             const guest = new UserIdent_1.UserIdent("guest", ["guest"]);
             const guestSysHandle = new SystemHandle(guest);
             guestSysHandle.fileSystem.setCwd("~");
-            const proc = System.createProcess(shell, guestSysHandle, null);
+            const proc = System.createProcess(shell, guestSysHandle, ["--motd"], null);
             Display_1.default.hookOut(proc);
             System.hookInput(proc);
-            proc.run(["--motd"]);
+            return proc.run();
+        })
+            .then(() => {
+            console.log("out");
+        }).catch(_e => {
+            const disp = document.getElementById("main-display");
+            while (disp === null || disp === void 0 ? void 0 : disp.firstChild) {
+                disp.removeChild(disp.firstChild);
+            }
+            console.log(_e);
         });
     }
     static hookInput(input) {
         System.inputHooks.push(input);
     }
     static keyInput(ev) {
-        System.inputHooks.forEach(hook => hook.input(ev.key, "user"));
+        System.inputHooks.forEach(hook => hook.input(ev, "user"));
     }
 }
 exports.System = System;
 System.processCount = 0;
 System.inputHooks = [];
+System.rootHash = "";
 
 
 /***/ }),
@@ -1137,6 +1273,12 @@ class UserIdent {
     }
     getEnvEntries() {
         return Object.entries(this._env);
+    }
+    remEnv(key) {
+        key = key.toUpperCase();
+        if (this._env.hasOwnProperty(key)) {
+            delete this._env[key];
+        }
     }
     clone() {
         const user = new UserIdent(this.name, this.groups);
