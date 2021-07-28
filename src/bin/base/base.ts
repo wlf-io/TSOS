@@ -4,13 +4,13 @@ export default abstract class BaseApp implements iProcessInstance {
 
     protected proc: iProcess;
     protected system: iSystem;
-    protected endPromise: { promise: Promise<iOutput>, res: (i: iOutput) => void, rej: (i: iOutput) => void };
+    private endPromise: { promise: Promise<iOutput>, res: (i: iOutput) => void, rej: (i: iOutput) => void };
 
     protected helpOutput: boolean = false;
 
     private outHooks: [IOFeed, string | null][] = [];
 
-    private running: boolean = false;
+    private state: AppState = AppState.new;
 
     protected rawArgs: string[] = [];
 
@@ -30,8 +30,15 @@ export default abstract class BaseApp implements iProcessInstance {
         };
     }
 
+    protected fail(reason: string): void {
+        this.state = AppState.crashed;
+        this.endPromise.rej(reason + "\n");
+    }
+
     kill(): void {
-        this.endPromise.rej("kill");
+        if (this.state != AppState.running) return;
+        this.state = AppState.killed;
+        this.endPromise.rej("");
     }
 
     hookOut(hook: IOFeed, ident: string | null = null): void {
@@ -39,16 +46,24 @@ export default abstract class BaseApp implements iProcessInstance {
     }
 
     protected output(out: iOutput) {
+        if (this.state != AppState.running) return;
         this.outHooks.forEach(hook => hook[0].input(out, hook[1]));
     }
 
-    public input(_input: iOutput, _ident: string): void {
-        throw new Error("Method not implemented.");
+    public input(input: iOutput, ident: string): void {
+        if (this.state != AppState.running) return;
+        if (input == "\u0018") this.end("");
+        else this.passInput(input, ident);
     }
 
+    protected passInput(_input: iOutput, _ident: string): void {
+
+    };
+
     public run(args: string[]): Promise<iOutput> {
-        if (this.running) return Promise.reject("Already Running");
-        this.running = true;
+        if (this.state != AppState.new) return Promise.reject(this.state);
+        // console.log(`Running: ${this.constructor.name}[${this.proc.pid}]`);
+        this.state = AppState.running;
         this.rawArgs = [...args];
         args = this.processArgFlags(args);
         window.setTimeout(() => this.start(args), 1);
@@ -59,6 +74,12 @@ export default abstract class BaseApp implements iProcessInstance {
 
     protected endOutput(output: iOutput): void {
         this.output(output);
+        this.end(output);
+    }
+
+    public end(output: iOutput) {
+        if (this.state != AppState.running) return;
+        this.state = AppState.ended;
         this.endPromise.res(output);
     }
 
@@ -66,7 +87,7 @@ export default abstract class BaseApp implements iProcessInstance {
         const remaining: string[] = [];
         let used: boolean = false;
         args.forEach((arg, index) => {
-            if (!arg.startsWith("-")) {
+            if (!arg.startsWith("-") || arg.length == 1) {
                 if (!used) remaining.push(arg);
                 used = false;
                 return;
@@ -100,4 +121,12 @@ export default abstract class BaseApp implements iProcessInstance {
         return false;
     }
 
+}
+
+enum AppState {
+    new = "new",
+    running = "running",
+    killed = "killed",
+    ended = "ended",
+    crashed = "crashed"
 }

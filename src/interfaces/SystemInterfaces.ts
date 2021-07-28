@@ -2,7 +2,7 @@ export interface iSystem {
     fileSystem: iFileSystem;
     user: iUserIdent;
     clone(): iSystem;
-    createProcess(bin: string, creator: iProcess): iProcess;
+    createProcess(bin: string, args: string[], creator: iProcess): iProcess;
 }
 
 export interface iUserIdent {
@@ -11,6 +11,7 @@ export interface iUserIdent {
 
     getEnv(key: string): string;
     setEnv(key: string, value: string): void;
+    remEnv(key: string): void;
     getEnvEntries(): [string, string][];
     clone(): iUserIdent;
 }
@@ -20,10 +21,13 @@ export interface iFAccess {
     longPermString: string;
     owner: string;
     group: string;
-    canRead(user:iUserIdent):boolean;
-    canWrite(user:iUserIdent):boolean;
-    canExecute(user:iUserIdent):boolean;
-    getListArray(octet?:boolean):string[];
+    accessTime: number;
+    modifyTime: number;
+    changeTime: number;
+    createTime: number;
+    canRead(user: iUserIdent): boolean;
+    canWrite(user: iUserIdent): boolean;
+    canExecute(user: iUserIdent): boolean;
 }
 
 export interface iFileSystem {
@@ -47,6 +51,8 @@ export interface iFileSystem {
     chown(path: string, user: string, group: string): void;
     list(path: string, trim?: boolean): string[];
     getPerm(path: string): iFAccess
+    abreviate(path: string): string;
+    delete(path: string): void;
 }
 
 export type iOutput = string | string[] | string[][];
@@ -54,16 +60,17 @@ export type iOutput = string | string[] | string[][];
 export interface IOFeed {
     hookOut(hook: IOFeed, ident: string | null): void;
     input(input: iOutput, ident: string | null): void;
+    end(input: iOutput): void;
 }
 
 export interface iProcess extends IOFeed {
     pid: number;
-    run(args: string[]): Promise<iOutput>;
+    run(): Promise<iOutput>;
     kill(): void;
     system: iSystem;
     fileSystem: iFileSystem;
-    createProcess(location: string): iProcess;
-    parent:iProcess|null;
+    createProcess(location: string, args: string[]): iProcess;
+    parent: iProcess | null;
 }
 
 export interface iProcessInstance extends IOFeed {

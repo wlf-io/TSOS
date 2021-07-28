@@ -57,9 +57,22 @@ export default class ls extends BaseApp {
             list = list.map(l => {
                 const dir = this.system.fileSystem.isDir(l);
                 const perm = this.system.fileSystem.getPerm(l);
-                const list = perm.getListArray(!this.humanReadable);
-                const ps = (dir ? "d" : "-") + list.shift();
-                return [ps, ...list, this.colouriseFile(l.substr(res.length + triml), dir, perm)]
+                const date = (new Date(perm.modifyTime * 1000));
+                const dateStr = date.toDateString().split(" ");
+                dateStr.shift();
+                if (dateStr[2] == (new Date()).getFullYear().toString()) {
+                    dateStr.pop();
+                    dateStr.push(date.toTimeString().substr(0, 5));
+                }
+                return [
+                    this.humanReadable ? perm.longPermString : perm.permString,
+                    "0",
+                    perm.owner,
+                    perm.group,
+                    dir ? "0" : this.getFileSize(l),
+                    dateStr.join(" "),
+                    this.colouriseFile(l.substr(res.length + triml), dir, perm)
+                ]
             }
             );
         } else {
@@ -69,7 +82,25 @@ export default class ls extends BaseApp {
                 return this.colouriseFile(l.substr(res.length + triml), dir, perm);
             })];
         }
+        list.push([]);
         return list;
+    }
+
+    private getFileSize(path: string): string {
+        let size = this.system.fileSystem.read(path).length
+        if (this.humanReadable) {
+            let s = "";
+            if (size > (1024 * 1024)) {
+                size /= (1024 * 1024);
+                s = "M";
+            } else if (size > 1024) {
+                size /= 1024;
+                s = "K";
+            }
+            return `${size.toFixed(1)}${s}B`;
+        } else {
+            return size.toString();
+        }
     }
 
     private colouriseFile(name: string, dir: boolean, access: iFAccess): string {

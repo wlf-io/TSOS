@@ -15,9 +15,11 @@ const deepFiles = async function* (dir) {
 };
 
 const fixBins = (bin, path) => {
+    path = path.split("/");
+    path = path.pop();
     bin = bin.replace(`//# sourceMappingURL=${path}.map`, `//# sourceMappingURL=/root/bin/${path}.map`);
     bin = bin.replace('var __webpack_exports__ =', 'return');
-    return bin;
+    return "#!\n" + bin;
 };
 
 
@@ -74,7 +76,12 @@ module.exports = [
             clear: './src/bin/clear.ts',
             sleep: './src/bin/sleep.ts',
             printenv: './src/bin/printenv.ts',
+            setenv: './src/bin/setenv.ts',
+            remenv: './src/bin/remenv.ts',
             args: './src/bin/args.ts',
+            pid: './src/bin/pid.ts',
+            exit: './src/bin/exit.ts',
+            watch: './src/bin/watch.ts',
         },
         output: {
             filename: "[name].js",
@@ -104,7 +111,7 @@ module.exports = [
                                 fs[n]["content"] = (bin ? fixBins(content, r) : content).split("\r\n").join("\n");
                                 fs[n]["perm"] = fs[n]["perm"] || ("root:root:0" + (bin ? 755 : 644).toString());
                             }
-                            await writeFile(path.resolve(__dirname, "dist/bin.json"), JSON.stringify(fs, null, 2));
+                            await writeFile(path.resolve(__dirname, "dist/root.json"), JSON.stringify(fs, null, 2));
                             // deepFiles(
 
                             // )

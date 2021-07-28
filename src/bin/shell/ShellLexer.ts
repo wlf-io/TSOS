@@ -13,8 +13,8 @@ export default class ShellLexer {
         this.stream = stream;
     }
 
-    private isWhitespace(ch: string): boolean {
-        return " \r\n\t".indexOf(ch) >= 0;
+    private isWhitespace(ch: string, nl: boolean = true): boolean {
+        return ((nl ? "\n" : "") + " \r\t").indexOf(ch) >= 0;
     }
     private isAToZ0To9(ch: string): boolean {
         return /[a-zA-Z0-9]/.test(ch);
@@ -52,13 +52,25 @@ export default class ShellLexer {
 
         const ch = this.stream.peek();
         const chAfter = this.stream.peek(1);
+        const line = this.stream.line + 1;
+        const column = this.stream.column;
+
+        // if (ch == "\n") {
+        //     this.stream.next();
+        //     return {
+        //         type: TokenType.spec,
+        //         value: ";",
+        //         raw: ";",
+        //         line,
+        //         column,
+        //     }
+        // }
+        if (ch == "#") return this.skipOneLineComment();
         if (ch == "/") {
             if (chAfter == "/") return this.skipOneLineComment();
             else if (chAfter == "*") return this.skipMultiLineComment();
         }
         this.pos++;
-        const line = this.stream.line + 1;
-        const column = this.stream.column;
 
         if (ch == "'" || ch == '"') return this.readWrapped(ch, TokenType.string, line, column);
         else if (this.isSpecial(ch)) return this.readSpecial(TokenType.spec, line, column);
@@ -141,12 +153,23 @@ export default class ShellLexer {
     }
 
     private resolveEscapedChar(char: string): string {
-        console.log("escaped char [" + char + "]");
         switch (char) {
             case "n":
                 return "\n";
             case "$":
                 return "\\$";
+            case "0":
+                let num = "";
+                let p = this.stream.peek();
+                if (/[0-7]/.test(p)) {
+                    num += this.stream.next();
+                }
+                p = this.stream.peek();
+                if (/[0-7]/.test(p)) {
+                    num += this.stream.next();
+                }
+                const o = parseInt(num, 8);
+                return decodeURIComponent("%" + o.toString(16));
             default:
                 return char;
         }

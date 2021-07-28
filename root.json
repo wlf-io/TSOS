@@ -7,5 +7,14 @@
     },
     "/etc/passwd": {
         "perm": "root:root:600"
+    },
+    "/home/guest/test.sh": {
+        "perm": "guest:guest:744"
+    },
+    "/home/guest/rm.sh": {
+        "perm": "guest:guest:744"
+    },
+    "/home/guest/loop.sh": {
+        "perm": "guest:guest:744"
     }
 }

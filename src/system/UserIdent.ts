@@ -35,6 +35,13 @@ export class UserIdent implements iUserIdent {
         return Object.entries(this._env);
     }
 
+    public remEnv(key: string): void {
+        key = key.toUpperCase();
+        if (this._env.hasOwnProperty(key)) {
+            delete this._env[key];
+        }
+    }
+
     public clone(): UserIdent {
         const user = new UserIdent(this.name, this.groups);
         this.getEnvEntries().forEach(v => user.setEnv(v[0], v[1]));

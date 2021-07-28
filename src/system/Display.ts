@@ -57,6 +57,9 @@ class DisplayInstance implements IOFeed {
         this.emptyElem(this.container);
         this.container.append(document.createElement("span"));
     }
+    end(_input: iOutput): void {
+        throw new Error("Method not implemented.");
+    }
 
     hookOut(hook: IOFeed, ident: string): void {
         this.outHooks.push([hook, ident]);
@@ -135,6 +138,12 @@ class DisplayInstance implements IOFeed {
             style.b = colour;
         } else {
             style.f = colour;
+        }
+
+        if (col === "0") {
+            style.f = "reset";
+            style.b = "reset";
+            style.s = "reset";
         }
 
         this.colours[`${row}`][`${column}`] = style;
@@ -250,7 +259,10 @@ class DisplayInstance implements IOFeed {
             case "j":
                 this.data = [""];
                 this.row = 0;
+                row = 0;
+                column = 0;
                 this.column = 0;
+                this.colours = {};
                 this.emptyElem(this.container);
                 this.container.append(document.createElement("span"));
                 rowsAffected.push(0);
@@ -265,6 +277,12 @@ class DisplayInstance implements IOFeed {
                 break;
             case "k":
                 this.data[row] = this.data[row].substring(0, column);
+                const cols = this.colours[row.toString()] || {};
+                this.colours[row.toString()] = {};
+                Object.entries(cols).filter(e => (parseInt(e[0]) || 0) <= column)
+                    .forEach(e => {
+                       this.colours[row][e[0].toString()] = e[1]; 
+                    });
                 rowsAffected.push(row);
                 break;
             case "n":
