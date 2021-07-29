@@ -104,7 +104,7 @@ export default class Process implements iProcess {
     }
 
     private getAvailablePrograms(): [string, string[]][] {
-        const path = this.user.getEnv("path").split(";");
+        const path = (this.user.getEnv("path") || "/bin").split(";");
         return path.map(p => [p, this.fileSystem.list(p, true)]);
     }
 

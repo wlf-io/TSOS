@@ -122,10 +122,11 @@ export default class shell extends BaseApp {
 
     private async runInput(input: string): Promise<any> {
         const runner = new ShellRunner(this, input, "shell_exec");
-        console.log("RUN INPUT", input);
+        // console.log("RUN INPUT", input);
         runner.test = this.test;
         this.shellRunning = runner;
         await runner.run();
+        this.clearScopedVars();
         this.shellRunning = null;
     }
 
@@ -184,10 +185,10 @@ export default class shell extends BaseApp {
     }
 
     async start(args: string[]) {
-        args.forEach((v, i) => this.setVar((i).toString(), v));
-        this.setVar("ARGC", args.length.toString());
+        args.forEach((v, i) => this.setVar((i).toString(), v, ""));
+        this.setVar("ARGC", args.length.toString(), "");
         await this.setup();
-        console.log("START", this.script, this.command, this.motd);
+        // console.log("START", this.script, this.command, this.motd);
         if (this.script != null) {
             const input = this.system.fileSystem.read(this.script);
             await this.runInput(input);
@@ -197,13 +198,13 @@ export default class shell extends BaseApp {
         } else if (this.motd) {
             try {
                 if (this.system.fileSystem.exists("/etc/shell/motd")) {
-                    console.log("MOTD");
+                    // console.log("MOTD");
                     await this.runInput(this.system.fileSystem.read("/etc/shell/motd"));
                 }
             } catch (e) {
 
             }
-            console.log("MOTD PROMPT");
+            // console.log("MOTD PROMPT");
             this.prompt();
         } else {
             this.prompt();
@@ -216,7 +217,7 @@ export default class shell extends BaseApp {
                 const test = this.test;
                 this.test = false;
                 await this.runInput(this.system.fileSystem.read("/etc/shell/profile"));
-                console.log("SETUP");
+                // console.log("SETUP");
                 this.test = test;
             }
         } catch (e) {
@@ -226,8 +227,8 @@ export default class shell extends BaseApp {
     }
 
     private async prompt(): Promise<any> {
-        console.log("PROMPT", this.getVar("PS1"), this.system.user.listEnv());
-        const p = await this.varReplace(this.getVar("PS1"));
+        // console.log("PROMPT", this.getVar("PS1",""), this.system.user.listEnv());
+        const p = await this.varReplace(this.getVar("PS1", "") || "$USER@$HOSTNAME:$CWD\\$\\$ ");
         this.output(p);
 
     }
@@ -263,30 +264,37 @@ export default class shell extends BaseApp {
         return vars;
     }
 
-    public getVar(name: string): string {
-        name = name.toLowerCase();
-        let value = "";
-        if (this.vars.hasOwnProperty(name)) {
-            value = this.vars[name];
-        } else {
-            value = this.process.system.user.getEnv(name);
+    public clearScopedVars() {
+        for (const k in this.vars) {
+            if (k.startsWith("SCOPE_")) {
+                delete this.vars[k];
+            }
         }
-        return value;
     }
 
-    public setVar(name: string, value: string): string {
-        name = name.toLowerCase();
+    public getVar(name: string, prefix: string): string | null {
+        name = name.toUpperCase().trim();
+        prefix = (prefix + name).toUpperCase().trim();
+        const v = this.vars[prefix] || (this.vars[name] || this.system.user.getEnv(name));
+        console.log("get var", name, prefix, v);
+        return v;
+    }
+
+    public setVar(name: string, value: string, prefix: string): string {
+        name = (prefix + name).toUpperCase().trim();
+        console.log("set var", name, value);
         this.vars[name] = value;
         return value;
     }
 
-    public remVar(name: string): void {
+    public remVar(name: string, prefix: string): void {
+        name = (prefix + name).toUpperCase().trim();
         if (this.vars.hasOwnProperty(name)) {
             delete this.vars[name];
         }
     }
 
-    public async varReplace(t: string): Promise<any> {
+    public async varReplace(t: string, scopePrefix: string = ""): Promise<any> {
         const stream = new LexerStream(t);
 
         let o = "";
@@ -308,12 +316,20 @@ export default class shell extends BaseApp {
                         varIsCmd = false;
                         inVar = false;
                         if (varName.length) {
-                            const runner = new ShellRunner(this, varName, "shell_exec");
+                            const runner = new ShellRunner(this, varName, "shell_exec", scopePrefix);
                             runner.out = false;
-                            console.log("VAR REPLCE RUN", varName);
-                            const out = await runner.run();
-
-                            console.log("VAR REPLCE RUN OUR", varName, out);
+                            // console.log("VAR REPLCE RUN", varName);
+                            let out = await runner.run();
+                            console.log(out);
+                            if (out instanceof Array && out.length) {
+                                if (out[0] instanceof Array) {
+                                    //@ts-ignore
+                                    out = out.map(o => o.join("\t")).join("\n");
+                                } else {
+                                    out = out.join("\t");
+                                }
+                            }
+                            // console.log("VAR REPLCE RUN OUR", varName, out);
                             o += out;
                         }
                     } else {
@@ -328,7 +344,7 @@ export default class shell extends BaseApp {
                     varIsCmdBC = 0;
                 } else {
                     if (varName.length) {
-                        o += this.getVar(varName);
+                        o += this.getVar(varName, scopePrefix);
                     }
                     o += ch;
                     inVar = false;
@@ -344,7 +360,7 @@ export default class shell extends BaseApp {
         }
 
         if (inVar) {
-            o += this.getVar(varName);
+            o += this.getVar(varName, scopePrefix);
         }
 
         return Promise.resolve(o);

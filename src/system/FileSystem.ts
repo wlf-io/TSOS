@@ -513,17 +513,21 @@ class FileSystem {
     }
 
     public read(path: FPath): string | null {
-        const res = getItem("FS:D:" + path.path);
-        if (res != null) {
-            const perm = this.getPerm(path);
-            perm.accessTime = (Date.now() / 1000 | 0);
-            this.setPerm(path, perm);
+        const t = this.getType(path);
+        let v = getItem("FS:D:" + path.path);
+        if (t == FSType.link) {
+            v = getItem("FS:D:" + v);
         }
-        return res;
+        return v;
     }
 
     public write(path: FPath, data: string): void {
-        setItem("FS:D:" + path.path, data);
+        const t = this.getType(path);
+        let p = path.path;
+        if (t == FSType.link) {
+            p = getItem("FS:D:" + p) || p;
+        }
+        setItem("FS:D:" + p, data);
         const perm = this.getPerm(path);
         perm.modifyTime = (Date.now() / 1000 | 0);
         this.setPerm(path, perm);
@@ -578,6 +582,7 @@ enum FSType {
     dir = "dir",
     in = "in",
     out = "out",
+    link = "link"
 }
 
 (new FileSystem()).mkdir(new FPath("/", "/", "root"), "root", "root");

@@ -9,7 +9,7 @@ export interface iUserIdent {
     name: string;
     groups: string[];
 
-    getEnv(key: string): string;
+    getEnv(key: string): string | null;
     setEnv(key: string, value: string): void;
     remEnv(key: string): void;
     listEnv(): [string, string][];

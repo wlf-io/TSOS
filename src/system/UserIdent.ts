@@ -20,14 +20,14 @@ export class UserIdent implements iUserIdent {
         return [...this._groups];
     }
 
-    public getEnv(key: string): string {
-        key = key.toUpperCase();
+    public getEnv(key: string): string | null {
+        key = key.toUpperCase().trim();
         if (key == "USER") return this.name;
-        return this._env[key] || "";
+        return this._env[key] || null;
     }
 
     public setEnv(key: string, value: string): void {
-        key = key.toUpperCase();
+        key = key.toUpperCase().trim();
         this._env[key] = value;
     }
 
@@ -36,7 +36,7 @@ export class UserIdent implements iUserIdent {
     }
 
     public remEnv(key: string): void {
-        key = key.toUpperCase();
+        key = key.toUpperCase().trim();
         if (this._env.hasOwnProperty(key)) {
             delete this._env[key];
         }

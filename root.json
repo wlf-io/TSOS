@@ -17,7 +17,10 @@
     "/home/guest/loop.sh": {
         "perm": "guest:guest:744"
     },
-    "/home/guest/fizzbuzz": {
+    "/home/guest/fizzbuzz.sh": {
+        "perm": "guest:guest:744"
+    },
+    "/home/guest/nested.sh": {
         "perm": "guest:guest:744"
     }
 }

@@ -24,12 +24,10 @@ endfunc;
 
 set count 1;
 
-:start;
+while $count <= 100;
 
     fizzbuzz $count;
 
     sum count 1;
 
-    if $count <= 100;
-        goto start;
-    endif;
+endwhile;

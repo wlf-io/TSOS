@@ -26,12 +26,14 @@ export default class ShellRunner implements IOFeed {
     private funcs: { [k: string]: { block: number, endBlock: number, args: string[] } } = {};
     private funcStack: { block: number, func: string }[] = [];
 
+    private scopePrefix: string;
 
 
-    constructor(shell: shell, script: string, ident: string) {
+    constructor(shell: shell, script: string, ident: string, scopePrefix: string = "") {
         this.shell = shell;
         this.blocker = new ShellBlocker(script);
         this.ident = ident;
+        this.scopePrefix = scopePrefix;
     }
 
     public end() {
@@ -63,7 +65,7 @@ export default class ShellRunner implements IOFeed {
         this.shell.input(output, this.ident);
     }
 
-    public async run(): Promise<any> {
+    public async run(): Promise<iOutput> {
         if (this.running) Promise.reject("running");
         this.running = true;
         this.blocks = this.blocker.getBlocks().filter(b => b.length);
@@ -71,9 +73,9 @@ export default class ShellRunner implements IOFeed {
         let args: iOutput = [];
         try {
             while (this.block < this.blocks.length) {
-                console.log("RUN BLOCK", [...this.blocks[this.block]]);
+                // console.log("RUN BLOCK", [...this.blocks[this.block]]);
                 args = await this.runBlock([...this.blocks[this.block]], this.block);
-                console.log("run");
+                // console.log("run");
                 this.block++;
             }
         } catch (e) {
@@ -100,7 +102,7 @@ export default class ShellRunner implements IOFeed {
 
         const vtokes = [];
         for (const t of tokes) {
-            const r = await this.shell.varReplace(t.value);
+            const r = await this.shell.varReplace(t.value, this.varScopePrefix);
             vtokes.push(r);
         }
         //console.log("RUN", tokes.map(t => t.value), vtokes);
@@ -146,8 +148,49 @@ export default class ShellRunner implements IOFeed {
         if (this.isFunc(name)) return this.runFunc(name, args, block);
         if (name == "return") return this.endFunc(args[0] || "", block);
         if (name == "endfunc") return this.endFunc("", block);
+        if (name == "while") return this.conditional(args, block, "while", "endwhile", null);
+        if (name == "endwhile") return this.endWhile(block);
+        if (name == "fromindex") return this.fromIndex(args, block);
         return Promise.resolve(false);
     }
+
+    private fromIndex(args: string[], block: number) {
+        if (args.length != 3) {
+            throw `fromindex needs 3 arguments: Line ${this.getBlockStartLine(block)}`;
+        }
+        return this.set([args[0], this.arrayIffy(args[1])[parseInt(args[2]) || 0]], block);
+    }
+
+    private async endWhile(block: number) {
+        let i = block;
+        let depth = 1;
+        let index: number | null = null;
+        while (--i >= 0) {
+            const b = this.blocks[i];
+            const n = ((b[0]?.value) || "").trim().toLowerCase();
+            if (n == "endwhile") depth++;
+            if (n == "while") depth--;
+            if (n == "while" && depth < 1) {
+                index = i - 1;
+                break;
+            }
+        }
+        if (index == null) {
+            throw `endwhile needs while above: Line ${this.getBlockStartLine(block)}`;
+        } else {
+            this.block = index;
+        }
+        return "";
+    }
+
+    public get varScopePrefix(): string {
+        if (this.funcStack.length > 0) {
+            const s = this.funcStack[this.funcStack.length - 1];
+            return `scope_${s.func}_${this.funcStack.length}_`;
+        }
+        return this.scopePrefix;
+    }
+
 
     private endFunc(arg: string, block: number) {
         const stack = this.funcStack.pop();
@@ -161,9 +204,13 @@ export default class ShellRunner implements IOFeed {
 
     private runFunc(name: string, args: string[], block: number) {
         const func = this.funcs[name];
-        func.args.forEach((a, i) => this.shell.setVar(a, args[i] || ""));
+        const toSet: [string, string][] = [];
+        func.args.forEach((a, i) => {
+            toSet.push([a, args[i] || ""]);
+        });
         this.block = func.block;
         this.funcStack.push({ block: block, func: name });
+        toSet.forEach(t => this.set(t, block));
         return "";
     }
 
@@ -240,12 +287,12 @@ export default class ShellRunner implements IOFeed {
 
         if (isNaN(parseFloat(a))) {
             isVar = a;
-            a = this.shell.getVar(a);
+            a = this.shell.getVar(a, this.varScopePrefix) || "";
         }
 
         a = parseInt(a) || 0;
         b = parseInt(b) || 0;
-        if (isVar == null) {
+        if (isVar !== null) {
             return this.set([args[0], func(a, b).toString()], block);
         } else {
             return func(a, b).toString();
@@ -256,10 +303,10 @@ export default class ShellRunner implements IOFeed {
         if (args.length != 2) {
             throw `set can only take 2 variables: : Line ${this.getBlockStartLine(block)}\n`;
         }
-        return this.shell.setVar(args[0], args[1]);
+        return this.shell.setVar(args[0], args[1], this.varScopePrefix);
     }
 
-    private async conditional(args: string[], block: number): Promise<string> {
+    private async conditional(args: string[], block: number, start: string = "if", end: string = "endif", endAlt: string | null = "else"): Promise<string> {
         if (args.length != 3 && args.length != 1) {
             throw `if can only take 1 or 3 variables: Line ${this.getBlockStartLine(block)}\n`;
         }
@@ -310,13 +357,12 @@ export default class ShellRunner implements IOFeed {
             const index = this.blocks.findIndex((b, i) => {
                 if (i <= block) return false;
                 const n = (b[0]?.value || "").trim().toLowerCase();
-                if (n == "if") depth++;
-                if (n == "endif" || (depth == 1 && n == "else")) depth--;
-                console.log("test endif|else", n, this.getBlockStartLine(i));
-                return depth < 1 && (n == "endif" || n == "else");
+                if (n == start) depth++;
+                if (n == end || (depth == 1 && n === endAlt)) depth--;
+                return depth < 1 && (n == end || n === endAlt);
             });
             if (index < 1) {
-                throw `if needs endif: Line ${this.getBlockStartLine(block)}\n`;
+                throw `${start} needs ${end}: Line ${this.getBlockStartLine(block)}\n`;
             }
             this.block = index;
         }

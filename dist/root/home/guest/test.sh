@@ -8,11 +8,19 @@ echo $PATH;
 
 echo ${pwd};
 
-echo "${ls ${pwd}}";
+echo "${ls -e ${pwd}}";
 
 echo "123${pwd}xyz";
 
 sleep 1;
+
+if "~/loop.sh" is file;
+    echo "\n==============================";
+    echo "==============================";
+    cat "~/loop.sh";
+    echo "==============================";
+    echo "==============================\n";
+endif;
 
 say test;
 
@@ -27,6 +35,6 @@ touch -s b;
 
 say "done!!!";
 
-set ls ${ls /bin}
+set ls "${ls -c /bin}";
 
 printvar;

@@ -73,6 +73,7 @@ export default class ShellLexer {
         this.pos++;
 
         if (ch == "'" || ch == '"') return this.readWrapped(ch, TokenType.string, line, column);
+        if (ch == "$") return this.readVarToken(TokenType.ident, line, column);
         else if (this.isSpecial(ch)) return this.readSpecial(TokenType.spec, line, column);
         else return this.readIdentifier(TokenType.ident, line, column);
 
@@ -91,6 +92,27 @@ export default class ShellLexer {
         });
         this.stream.next();
         return this.next();
+    }
+
+    private readVarToken(type: TokenType, line: number, column: number): ShellToken {
+        const func = this.stream.peek(1) == "{";
+        let depth = 0;
+        const raw = this.readEscaped((ch, n) => {
+            if (func) {
+                if (ch == "{") depth++;
+                if (ch == "}") depth--;
+                return ch == "}" && depth < 1;
+            } else {
+                return this.isWhitespace(n) || this.isSpecial(n);
+            }
+        });
+        return {
+            type,
+            value: raw,
+            raw,
+            line,
+            column
+        };
     }
 
     private readWrapped(wrapper: string, type: TokenType, line: number, column: number): ShellToken {
