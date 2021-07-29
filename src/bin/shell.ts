@@ -320,7 +320,6 @@ export default class shell extends BaseApp {
                             runner.out = false;
                             // console.log("VAR REPLCE RUN", varName);
                             let out = await runner.run();
-                            console.log(out);
                             if (out instanceof Array && out.length) {
                                 if (out[0] instanceof Array) {
                                     //@ts-ignore

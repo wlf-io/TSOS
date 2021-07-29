@@ -417,7 +417,6 @@ export default class ShellRunner implements IOFeed {
     }
 
     private arrayIffy(arg: string): string[] {
-        console.log("ARRAYIFFY", JSON.stringify(arg));
         if (arg.includes("\n")) return arg.split("\n");
         if (arg.includes("\t")) return arg.split("\t");
         throw "array convert fail";
