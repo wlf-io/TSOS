@@ -22,5 +22,8 @@
     },
     "/home/guest/nested.sh": {
         "perm": "guest:guest:744"
+    },
+    "/home/guest/array.sh": {
+        "perm": "guest:guest:744"
     }
 }

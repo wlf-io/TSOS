@@ -4,17 +4,11 @@ func fizzbuzz num;
 
     echo -e $num;
 
-    set three $num;
-    mod three 3;
-
-    if $three == 0;
+    ifnot $num % 3;
         echo -e " fizz";
     endif;
 
-    set five $num;
-    mod five 5;
-
-    if $five == 0;
+    ifnot $num % 5;
         echo -e " buzz";
     endif;
 

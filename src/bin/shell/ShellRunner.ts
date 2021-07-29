@@ -134,6 +134,8 @@ export default class ShellRunner implements IOFeed {
         if (name == "goto") return this.goto(args[0] || "", block);
         if (name == "endif") return Promise.resolve("");
         if (name == "if") return this.conditional(args, block);
+        if (name == "ifnot") return this.conditional(args, block, "ifnot", "endif", "else", true);
+        if (name == "else") return this.skipElse(block);
         if (name == "set") return this.set(args, block);
         if (name == "len") return this.len(args, block);
         if (name == "count") return this.count(args, block);
@@ -152,6 +154,24 @@ export default class ShellRunner implements IOFeed {
         if (name == "endwhile") return this.endWhile(block);
         if (name == "fromindex") return this.fromIndex(args, block);
         return Promise.resolve(false);
+    }
+
+    private async skipElse(block: number) {
+        let depth = 1;
+        const index = this.blocks.findIndex((b, i) => {
+            if (i <= block) return false;
+            const n = ((b[0]?.value) || "").trim().toLowerCase();
+            if (n == "if" || n == "ifnot") depth++;
+            if (n == "endif") {
+                depth--;
+                if (depth < 1) return true;
+            }
+            return false;
+        });
+
+        if (index < 0) throw `else needs endif: Line ${this.getBlockStartLine(block)}`;
+        this.block = index;
+        return "";
     }
 
     private fromIndex(args: string[], block: number) {
@@ -306,7 +326,7 @@ export default class ShellRunner implements IOFeed {
         return this.shell.setVar(args[0], args[1], this.varScopePrefix);
     }
 
-    private async conditional(args: string[], block: number, start: string = "if", end: string = "endif", endAlt: string | null = "else"): Promise<string> {
+    private async conditional(args: string[], block: number, start: string = "if", end: string = "endif", endAlt: string | null = "else", invert: boolean = false): Promise<string> {
         if (args.length != 3 && args.length != 1) {
             throw `if can only take 1 or 3 variables: Line ${this.getBlockStartLine(block)}\n`;
         }
@@ -344,12 +364,19 @@ export default class ShellRunner implements IOFeed {
                 case "<=":
                     pass = intA <= intB;
                     break;
+                case "%":
+                    pass = (intA % intB) != 0;
+                    break;
                 case "is":
                     pass = this.conditionalIs(a, b, block);
                     break;
                 default:
                     throw `Unrecognized operator: ${op}: Line ${this.getBlockStartLine(block)}\n`;
             }
+        }
+
+        if (invert) {
+            pass = !pass;
         }
 
         if (!pass) {
@@ -373,9 +400,9 @@ export default class ShellRunner implements IOFeed {
     private conditionalIs(a: string, b: string, block: number) {
         switch (b.toLowerCase()) {
             case "file":
-                return this.shell.process.fileSystem.isFile(a);
+                return this.shell.process.fileSystem.isFile(a.trim());
             case "dir":
-                return this.shell.process.fileSystem.isDir(a);
+                return this.shell.process.fileSystem.isDir(a.trim());
             case "int":
                 return this.shell.process.fileSystem.isDir(a);
             case "float":

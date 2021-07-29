@@ -276,13 +276,13 @@ export default class shell extends BaseApp {
         name = name.toUpperCase().trim();
         prefix = (prefix + name).toUpperCase().trim();
         const v = this.vars[prefix] || (this.vars[name] || this.system.user.getEnv(name));
-        console.log("get var", name, prefix, v);
+        // console.log("get var", name, prefix, v);
         return v;
     }
 
     public setVar(name: string, value: string, prefix: string): string {
         name = (prefix + name).toUpperCase().trim();
-        console.log("set var", name, value);
+        // console.log("set var", name, value);
         this.vars[name] = value;
         return value;
     }
