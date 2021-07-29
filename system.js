@@ -880,16 +880,20 @@ class FileSystem {
         return FSType[t] || null;
     }
     read(path) {
-        const res = getItem("FS:D:" + path.path);
-        if (res != null) {
-            const perm = this.getPerm(path);
-            perm.accessTime = (Date.now() / 1000 | 0);
-            this.setPerm(path, perm);
+        const t = this.getType(path);
+        let v = getItem("FS:D:" + path.path);
+        if (t == FSType.link) {
+            v = getItem("FS:D:" + v);
         }
-        return res;
+        return v;
     }
     write(path, data) {
-        setItem("FS:D:" + path.path, data);
+        const t = this.getType(path);
+        let p = path.path;
+        if (t == FSType.link) {
+            p = getItem("FS:D:" + p) || p;
+        }
+        setItem("FS:D:" + p, data);
         const perm = this.getPerm(path);
         perm.modifyTime = (Date.now() / 1000 | 0);
         this.setPerm(path, perm);
@@ -938,6 +942,7 @@ var FSType;
     FSType["dir"] = "dir";
     FSType["in"] = "in";
     FSType["out"] = "out";
+    FSType["link"] = "link";
 })(FSType || (FSType = {}));
 (new FileSystem()).mkdir(new FPath("/", "/", "root"), "root", "root");
 (new FileSystem()).mkdir(new FPath("/bin", "/", "root"), "root", "root");
@@ -1051,7 +1056,7 @@ class Process {
         return path[0] + "/" + name;
     }
     getAvailablePrograms() {
-        const path = this.user.getEnv("path").split(";");
+        const path = (this.user.getEnv("path") || "/bin").split(";");
         return path.map(p => [p, this.fileSystem.list(p, true)]);
     }
     log(...args) {
@@ -1284,20 +1289,20 @@ class UserIdent {
         return [...this._groups];
     }
     getEnv(key) {
-        key = key.toUpperCase();
+        key = key.toUpperCase().trim();
         if (key == "USER")
             return this.name;
-        return this._env[key] || "";
+        return this._env[key] || null;
     }
     setEnv(key, value) {
-        key = key.toUpperCase();
+        key = key.toUpperCase().trim();
         this._env[key] = value;
     }
     listEnv() {
         return Object.entries(this._env);
     }
     remEnv(key) {
-        key = key.toUpperCase();
+        key = key.toUpperCase().trim();
         if (this._env.hasOwnProperty(key)) {
             delete this._env[key];
         }
