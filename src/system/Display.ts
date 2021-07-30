@@ -51,6 +51,8 @@ class DisplayInstance implements IOFeed {
 
     private colours: { [k: string]: { [k: string]: DisplayStyle } } = {};
 
+    private savedPos: { row: number, column: number }[] = [];
+
 
     constructor(elem: HTMLElement) {
         this.container = elem;
@@ -286,14 +288,42 @@ class DisplayInstance implements IOFeed {
                     });
                 rowsAffected.push(row);
                 break;
+            case "h":
+                this.column = 0;
+                this.row = this.data.length - 1;
+                rowsAffected.push(row);
+                rowsAffected.push(this.row);
+                break;
             case "n":
                 this.output(`\u001B[${row};${column}R`);
+                break;
+            case "s":
+                this.savePos();
+                break;
+            case "u":
+                rowsAffected.push(...this.restorePos());
                 break;
             default:
                 console.log("Unhandled Escape Sequence", sequence);
         }
         if (this.column < 0) this.column = 0;
         if (this.column > this.data[row].length) this.column = this.data[row].length;
+        return rowsAffected;
+    }
+
+    private savePos(): void {
+        this.savedPos.push({ row: this.row, column: this.column });
+    }
+
+    private restorePos(): number[] {
+        const pos = this.savedPos.pop();
+        const rowsAffected: number[] = [];
+        if (pos) {
+            rowsAffected.push(this.calcRowFromOffset());
+            this.row = pos.row;
+            this.column = pos.column;
+            rowsAffected.push(this.calcRowFromOffset());
+        }
         return rowsAffected;
     }
 
@@ -367,10 +397,19 @@ class DisplayInstance implements IOFeed {
         return [...new Set(linesAffected)];
     }
 
+    private calcRowFromOffset(): number {
+        return this.data.length - 1 - this.row;
+    }
+
+    private calcColumnFromOffset(row: number): number {
+        return this.column < 0 ? this.data[row].length - 1 : this.column;
+    }
+
     private handleChars(next: string): number[] {
 
-        const r = this.data.length - 1 - this.row;
-        let c = this.column < 0 ? this.data[r].length - 1 : this.column;
+        const r = this.calcRowFromOffset();
+        let c = this.calcColumnFromOffset(r);
+
         if (c < 0) c = 0;
         const linesAffected: number[] = [];
         switch (next[0] || "") {

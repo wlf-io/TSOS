@@ -9,15 +9,17 @@ func listdir dir;
 
     set i 0;
 
+    set sep "/";
+
+    if $dir == "/";
+        set sep "";
+    endif;
+
     while $i < $len;
 
         fromindex item $list $i;
 
-        if $dir == "/";
-            set item "/$item";
-        else;
-            set item "$dir/$item";
-        endif;
+        set item "{$dir}{$sep}{$item}";
 
         echo $item;
 

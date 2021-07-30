@@ -48,7 +48,13 @@ export default class ls extends BaseApp {
     }
 
     private list(path: string): string[][] {
-        let list: string[] | string[][] = this.system.fileSystem.list(path);
+        let list: string[] | string[][] = [];
+        try {
+            list = this.system.fileSystem.list(path);
+        } catch (e) {
+            this.fail(e);
+            return [];
+        }
         list.sort();
         const res = this.system.fileSystem.resolve(path);
         const triml = res == "/" ? 0 : 1;

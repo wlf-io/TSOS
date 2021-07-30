@@ -25,5 +25,8 @@
     },
     "/home/guest/array.sh": {
         "perm": "guest:guest:744"
+    },
+    "/home/guest/return.sh": {
+        "perm": "guest:guest:744"
     }
 }

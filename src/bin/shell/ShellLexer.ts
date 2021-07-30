@@ -178,6 +178,8 @@ export default class ShellLexer {
         switch (char) {
             case "n":
                 return "\n";
+            case "t":
+                return "\t";
             case "$":
                 return "\\$";
             case "0":

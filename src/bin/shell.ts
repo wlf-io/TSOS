@@ -18,6 +18,7 @@ export default class shell extends BaseApp {
     private vars: { [k: string]: string } = {};
 
     private shellRunning: ShellRunner | null = null;
+    private subRunners: ShellRunner[] = [];
 
     protected handleFlag(flag: string, arg: string): boolean {
         switch (flag.toLowerCase()) {
@@ -66,6 +67,19 @@ export default class shell extends BaseApp {
     private userInput(input: iOutput, ident: string): void {
         if (typeof input != "string") {
             throw "USER INPUT ARRAY???";
+        }
+        if (input == "\u0018") {
+            if (this.shellRunning == null && this.subRunners.length < 1) {
+                if (this.script == null && this.command == false) {
+                    this.inputStr = "";
+                    this.column = 0;
+                    this.prompt();
+                }
+            } else {
+                this.shellRunning?.input(input, ident);
+                this.subRunners.forEach(s => s.input(input, ident));
+            }
+            return;
         }
         if (this.shellRunning != null) {
             this.shellRunning.input(input, ident);
@@ -117,6 +131,7 @@ export default class shell extends BaseApp {
                     this.addToInput(input);
                     break;
             }
+            this.output(`\u001B[S\u001B[H${this.column}\u001B[U`)
         }
     }
 
@@ -275,7 +290,7 @@ export default class shell extends BaseApp {
     public getVar(name: string, prefix: string): string | null {
         name = name.toUpperCase().trim();
         prefix = (prefix + name).toUpperCase().trim();
-        const v = this.vars[prefix] || (this.vars[name] || this.system.user.getEnv(name));
+        const v = this.vars[prefix] ?? (this.vars[name] ?? this.system.user.getEnv(name));
         // console.log("get var", name, prefix, v);
         return v;
     }
@@ -294,7 +309,7 @@ export default class shell extends BaseApp {
         }
     }
 
-    public async varReplace(t: string, scopePrefix: string = ""): Promise<any> {
+    public async varReplace(t: string, scopePrefix: string = "", line: number = 0): Promise<any> {
         const stream = new LexerStream(t);
 
         let o = "";
@@ -304,6 +319,7 @@ export default class shell extends BaseApp {
         let varName = "";
         let varIsCmd: boolean = false;
         let varIsCmdBC: number = 0;
+        let wrapped = false;
 
         while (!stream.eof()) {
             const ch = stream.next();
@@ -317,16 +333,13 @@ export default class shell extends BaseApp {
                         inVar = false;
                         if (varName.length) {
                             const runner = new ShellRunner(this, varName, "shell_exec", scopePrefix);
+                            this.subRunners.push(runner);
                             runner.out = false;
                             // console.log("VAR REPLCE RUN", varName);
                             let out = await runner.run();
-                            if (out instanceof Array && out.length) {
-                                if (out[0] instanceof Array) {
-                                    //@ts-ignore
-                                    out = out.map(o => o.join("\t")).join("\n");
-                                } else {
-                                    out = out.join("\t");
-                                }
+                            this.subRunners.pop();
+                            if (out instanceof Array) {
+                                out = JSON.stringify(out);
                             }
                             // console.log("VAR REPLCE RUN OUR", varName, out);
                             o += out;
@@ -345,7 +358,10 @@ export default class shell extends BaseApp {
                     if (varName.length) {
                         o += this.getVar(varName, scopePrefix);
                     }
-                    o += ch;
+                    if (wrapped) {
+                        if (ch != "}") throw `wrapped string token should end with '}' : Line ${line}`;
+                    }
+                    else o += ch;
                     inVar = false;
                 }
             } else if (ch == "\\") {
@@ -353,6 +369,11 @@ export default class shell extends BaseApp {
             } else if (ch == "$") {
                 inVar = true;
                 varName = "";
+            } else if (ch == "{" && stream.peek() == "$") {
+                stream.next();
+                inVar = true;
+                varName = "";
+                wrapped = true;
             } else {
                 o += ch
             }

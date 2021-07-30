@@ -1,8 +1,16 @@
 #!/bin/shell
 
+func section name;
+    echo "\n==============================";
+    echo "\t$name";
+    echo "==============================";
+endfunc;
+
 func say msg;
     echo $msg;
 endfunc;
+
+section "Tokens";
 
 echo $PATH;
 
@@ -12,19 +20,16 @@ echo "${ls -e ${pwd}}";
 
 echo "123${pwd}xyz";
 
-sleep 1;
+echo "abc{$path}abc{$user}abc";
 
+section "loop.sh";
 if "~/loop.sh" is file;
-    echo "\n==============================";
-    echo "==============================";
     cat "~/loop.sh";
-    echo "==============================";
-    echo "==============================\n";
 endif;
 
-say test;
+say "test funcs";
 
-sleep 1;
+section "files";
 
 mkdir -s ttt;
 
@@ -33,8 +38,16 @@ cd ttt;
 touch -s a;
 touch -s b;
 
-say "done!!!";
+section vars;
 
 set ls "${ls -c /bin}";
 
 printvar;
+
+section arrays;
+
+echo ${count $ls};
+
+while ${count ls} > 0;
+    echo ${pop ls};
+endwhile;

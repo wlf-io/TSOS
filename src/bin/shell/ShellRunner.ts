@@ -102,10 +102,9 @@ export default class ShellRunner implements IOFeed {
 
         const vtokes = [];
         for (const t of tokes) {
-            const r = await this.shell.varReplace(t.value, this.varScopePrefix);
+            const r = await this.shell.varReplace(t.value, this.varScopePrefix, this.getBlockStartLine(block));
             vtokes.push(r);
         }
-        //console.log("RUN", tokes.map(t => t.value), vtokes);
 
         if (this.test) {
             this.output(JSON.stringify(tokes.map(t => t.value)) + "\n", "test");
@@ -113,6 +112,8 @@ export default class ShellRunner implements IOFeed {
             return Promise.resolve("");
         }
         const name = vtokes.shift() || "";
+
+        if (name == "set") console.log("RUN", tokes.map(t => t.value), vtokes);
 
         const internal: any = await this.handleInternal(name, vtokes, block);
         if (internal !== false) {
@@ -123,7 +124,11 @@ export default class ShellRunner implements IOFeed {
         this.currentProc = proc;
         this.currentProcIdent = `${name}[${proc.pid}]`;
         proc.hookOut(this, this.currentProcIdent);
-        return proc.run();
+        try {
+            return await proc.run();
+        } catch (e) {
+            throw e;
+        }
         // this.output(JSON.stringify(tokes.map(t => t.raw)) + "\n");
         // return Promise.resolve();
     }
@@ -153,10 +158,12 @@ export default class ShellRunner implements IOFeed {
         if (name == "while") return this.conditional(args, block, "while", "endwhile", null);
         if (name == "endwhile") return this.endWhile(block);
         if (name == "fromindex") return this.fromIndex(args, block);
+        if (name == "pop") return this.pop(args, block);
+        if (name == "push") return this.push(args, block);
         return Promise.resolve(false);
     }
 
-    private async skipElse(block: number) {
+    private skipElse(block: number) {
         let depth = 1;
         const index = this.blocks.findIndex((b, i) => {
             if (i <= block) return false;
@@ -175,13 +182,52 @@ export default class ShellRunner implements IOFeed {
     }
 
     private fromIndex(args: string[], block: number) {
-        if (args.length != 3) {
-            throw `fromindex needs 3 arguments: Line ${this.getBlockStartLine(block)}`;
+        if (![2, 3].includes(args.length)) {
+            throw `fromindex needs 2 or 3 arguments: Line ${this.getBlockStartLine(block)}`;
         }
-        return this.set([args[0], this.arrayIffy(args[1])[parseInt(args[2]) || 0]], block);
+        const index = parseInt(args.pop() || "") || 0;
+        const str = args.pop() ?? "";
+        const list = this.arrayIffy(str);
+        const item = list[index] || "";
+        if (args.length == 3) {
+            return this.set([args[0], item], block);
+        }
+        return item;
     }
 
-    private async endWhile(block: number) {
+    private pop(args: string[], block: number) {
+        const arg = args[0] || "";
+        let val = this.getVar(arg);
+        let useVar = true;
+        if (val.length < 1) {
+            val = arg;
+            useVar = false;
+        }
+        const array = this.arrayIffy(val);
+        const result = array.pop() || "";
+        if (useVar) {
+            this.set([arg, this.stringIffy(array)], block);
+        }
+        return result;
+    }
+
+    private push(args: string[], block: number) {
+        const arg = args[0] || "";
+        let val = this.getVar(arg);
+        let useVar = true;
+        if (val.length < 1) {
+            val = arg;
+            useVar = false;
+        }
+        const array = this.arrayIffy(val);
+        array.push(args[1] || "");
+        if (useVar) {
+            this.set([arg, this.stringIffy(array)], block);
+        }
+        return "";
+    }
+
+    private endWhile(block: number) {
         let i = block;
         let depth = 1;
         let index: number | null = null;
@@ -212,12 +258,13 @@ export default class ShellRunner implements IOFeed {
     }
 
 
-    private endFunc(arg: string, block: number) {
+    private endFunc(arg: string, _block: number) {
         const stack = this.funcStack.pop();
         if (stack) {
             this.block = stack.block;
         } else {
-            throw `stack error, failed to pop: Line ${this.blocks[block][0].line}\n`;
+            this.block = this.blocks.length;
+            // throw `stack error, failed to pop: Line ${this.blocks[block][0].line}\n`;
         }
         return arg;
     }
@@ -238,7 +285,7 @@ export default class ShellRunner implements IOFeed {
         return Object.keys(this.funcs).includes(name);
     }
 
-    private async registerFunc(args: string[], block: number) {
+    private registerFunc(args: string[], block: number) {
         if (args.length < 1) {
             throw `func must have a name: Line ${this.getBlockStartLine(block)}\n`;
         }
@@ -257,12 +304,12 @@ export default class ShellRunner implements IOFeed {
         return "";
     }
 
-    private async printVar(): Promise<string> {
+    private printVar(): string {
         this.output([...this.shell.listVars(), []], "printvar");
         return "";
     }
 
-    private async goto(label: string, block: number): Promise<string> {
+    private goto(label: string, block: number) {
         const index = this.blocks.findIndex(block => {
             return (block[0]?.value || "") == `:${label}`;
         });
@@ -273,7 +320,7 @@ export default class ShellRunner implements IOFeed {
         return "";
     }
 
-    private async len(args: string[], block: number) {
+    private len(args: string[], block: number) {
         if (![1, 2].includes(args.length)) {
             throw `len can only take 1 or 2 variables: Line ${this.getBlockStartLine(block)}\n`;
         }
@@ -284,7 +331,7 @@ export default class ShellRunner implements IOFeed {
         }
     }
 
-    private async count(args: string[], block: number) {
+    private count(args: string[], block: number) {
         if (![1, 2].includes(args.length)) {
             throw `count can only take 1 or 2 variables: Line ${this.getBlockStartLine(block)}\n`;
         }
@@ -295,7 +342,11 @@ export default class ShellRunner implements IOFeed {
         }
     }
 
-    private async math(args: string[], func: (a: number, b: number) => number, name: string, block: number): Promise<string> {
+    private getVar(name: string) {
+        return this.shell.getVar(name, this.varScopePrefix) || ""
+    }
+
+    private math(args: string[], func: (a: number, b: number) => number, name: string, block: number): string {
         if (args.length != 2) {
             throw `${name} can only take 2 variables: Line ${this.getBlockStartLine(block)}\n`;
         }
@@ -307,7 +358,7 @@ export default class ShellRunner implements IOFeed {
 
         if (isNaN(parseFloat(a))) {
             isVar = a;
-            a = this.shell.getVar(a, this.varScopePrefix) || "";
+            a = this.getVar(a);
         }
 
         a = parseInt(a) || 0;
@@ -319,14 +370,14 @@ export default class ShellRunner implements IOFeed {
         }
     }
 
-    private async set(args: string[], block: number): Promise<string> {
+    private set(args: string[], block: number): string {
         if (args.length != 2) {
             throw `set can only take 2 variables: : Line ${this.getBlockStartLine(block)}\n`;
         }
         return this.shell.setVar(args[0], args[1], this.varScopePrefix);
     }
 
-    private async conditional(args: string[], block: number, start: string = "if", end: string = "endif", endAlt: string | null = "else", invert: boolean = false): Promise<string> {
+    private conditional(args: string[], block: number, start: string = "if", end: string = "endif", endAlt: string | null = "else", invert: boolean = false): string {
         if (args.length != 3 && args.length != 1) {
             throw `if can only take 1 or 3 variables: Line ${this.getBlockStartLine(block)}\n`;
         }
@@ -417,9 +468,21 @@ export default class ShellRunner implements IOFeed {
     }
 
     private arrayIffy(arg: string): string[] {
-        if (arg.includes("\n")) return arg.split("\n");
-        if (arg.includes("\t")) return arg.split("\t");
-        throw "array convert fail";
+        const array = JSON.parse(arg);
+        if (!(array instanceof Array)) throw `failed to decord array`;
+        return array.map(a => (["string"].includes(typeof a)) ? a : JSON.stringify(a));
+    }
+
+    private stringIffy(arg: string[]): string {
+        return JSON.stringify(
+            arg.map(a => {
+                try {
+                    return JSON.parse(a);
+                } catch {
+                    return a;
+                }
+            })
+        );
     }
 
 }
