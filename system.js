@@ -544,6 +544,11 @@ const queueWrite = () => {
             writeStart = 0;
             System_1.System.debug("Disk Write Done", (new Date()).toTimeString());
             System_1.System.debug("Disk Write Time", performance.now() - writeStart);
+            window.setTimeout(() => {
+                System_1.System.debug("Disk Write Pending", null);
+                System_1.System.debug("Disk Write Done", null);
+                System_1.System.debug("Disk Write Time", null);
+            }, 10000);
         }
     }, 50);
 };
@@ -584,7 +589,12 @@ class FileSystemHandle {
     }
     write(path, data) {
         path = this.ensureFPath(path);
-        this.writeCheck(path);
+        if (this.exists(path)) {
+            this.writeCheck(path);
+        }
+        else {
+            this.touch(path);
+        }
         this.fs.write(path, data);
     }
     append(path, data) {
@@ -881,6 +891,8 @@ class FileSystem {
         (new FileSystem()).mkdir(new FSModels_1.FPath("/root", "/", "root"), permRoot);
         (new FileSystem()).mkdir(new FSModels_1.FPath("/etc", "/", "root"), permRoot);
         (new FileSystem()).mkdir(new FSModels_1.FPath("/etc/shell", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FSModels_1.FPath("/usr", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FSModels_1.FPath("/usr/bin", "/", "root"), permRoot);
         loadCache();
         window.onbeforeunload = () => {
             forceSaveCache();
@@ -1112,6 +1124,9 @@ class System {
         return new Process_1.default(System.processCount, system.clone(), next, args, creator);
     }
     static setup(system) {
+        if (system.fileSystem.isFile("/etc/version_hash")) {
+            System.rootHash = (system.fileSystem.read("/etc/version_hash") || "").trim();
+        }
         if (System.isDev)
             System.toggleDebug();
         return System.loadRoot(system, () => true, true)
@@ -1123,17 +1138,17 @@ class System {
     }
     static async loadRoot(system, filter, output = false) {
         const response = await fetch("root.json");
-        const txt = await response.text();
-        const hashB = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(txt));
-        const hashA = Array.from(new Uint8Array(hashB));
-        const hash = hashA.map(a => a.toString(16).padStart(2, "0")).join("");
-        if (hash == System.rootHash)
-            return;
-        console.log("root changed", hash);
-        System.rootHash = hash;
-        const json = JSON.parse(txt);
-        if (json == null)
+        const fjson = await response.json();
+        if (fjson == null)
             throw "root json is null";
+        const hash = fjson.hash || null;
+        if (System.rootHash == hash)
+            return;
+        console.log("Hash Change: ", System.rootHash, "to", hash);
+        System.rootHash = hash;
+        const json = fjson.fs || null;
+        if (json == null)
+            throw "root fs json is null";
         if (output)
             Display_1.default.instance.input("Installing...\n", "setup");
         for (const e of Object.entries(json)) {
@@ -1159,6 +1174,7 @@ class System {
                 console.log(e);
             }
         }
+        system.fileSystem.write("/etc/version_hash", `${hash}\n`);
         console.groupEnd();
         if (output) {
             if (!System.isDev) {
