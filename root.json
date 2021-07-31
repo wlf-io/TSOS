@@ -31,5 +31,8 @@
     },
     "/home/guest/return.sh": {
         "perm": "guest:guest:744"
+    },
+    "/home/guest/conway.sh": {
+        "perm": "guest:guest:744"
     }
 }

@@ -23,13 +23,14 @@ export default class ShellBlocker {
         while (!this.lexer.eof()) {
             const next = this.lexer.next();
             if (next == null) continue;
+            if (next.value == "" && next.raw != '""' && next.raw != "''") continue;
             if (next.value == ";") {
                 this.blocks.push(currentBlock);
                 currentBlock = new ShellBlock();
                 continue;
             }
             if (next.type == TokenType.spec) {
-                if (next.value == ">" || next.value == ">>" || next.value == "|") {
+                if ((next.value == ">" || next.value == ">>" || next.value == "|") && !this.isGreaterThan(next.value, currentBlock)) {
                     const append = next.value == ">>";
                     currentBlock.passOutput = true;
                     this.blocks.push(currentBlock);
@@ -50,7 +51,17 @@ export default class ShellBlocker {
         this.blocks.push(currentBlock);
     }
 
-
+    private isGreaterThan(val: string, block: ShellBlock) {
+        if (val != ">") return false;
+        if (block.tokens.length < 2 || block.tokens.length > 3) return false;
+        switch (block.tokens[0].value.trim().toLowerCase()) {
+            case "if":
+            case "while":
+                return true;
+            default:
+                return false;
+        }
+    }
 
 }
 

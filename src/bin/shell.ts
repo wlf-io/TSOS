@@ -223,7 +223,7 @@ export default class shell extends BaseApp {
         // console.log("START", this.script, this.command, this.motd);
         if (this.script != null) {
             const input = this.system.fileSystem.read(this.script);
-            await this.runInput(input, undefined, this.script);
+            await this.runInput(input, undefined, "script: " + this.script);
             this.endOutput("");
         } else if (this.command) {
 

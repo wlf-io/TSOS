@@ -4,6 +4,10 @@ setenv PS1 "\033[0m\033[32m\$USER@\033[32m\$HOSTNAME\033[0m:\033[34m\$CWD_SHORT\
 
 setenv HOSTNAME ${hostname -e};
 
+if $HOSTNAME == "127.0.0.1";
+    setenv HOSTNAME "dev";
+endif;
+
 if ~/.profile is exec;
     ~/.profile;
 endif;
