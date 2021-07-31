@@ -107,6 +107,9 @@ export class System {
     }
 
     public static setup(system: iSystem) {
+        if (system.fileSystem.isFile("/etc/version_hash")) {
+            System.rootHash = (system.fileSystem.read("/etc/version_hash") || "").trim();
+        }
         if (System.isDev) System.toggleDebug();
         return System.loadRoot(system, () => true, true)
             .then(() => {
@@ -118,15 +121,14 @@ export class System {
 
     private static async loadRoot(system: iSystem, filter: ((s: string) => boolean), output: boolean = false) {
         const response = await fetch("root.json");
-        const txt = await response.text();
-        const hashB = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(txt));
-        const hashA = Array.from(new Uint8Array(hashB));
-        const hash = hashA.map(a => a.toString(16).padStart(2, "0")).join("");
-        if (hash == System.rootHash) return;
-        console.log("root changed", hash);
+        const fjson = await response.json();
+        if (fjson == null) throw "root json is null";
+        const hash = fjson.hash || null;
+        if (System.rootHash == hash) return;
+        console.log("Hash Change: ", System.rootHash, "to", hash);
         System.rootHash = hash;
-        const json = JSON.parse(txt);
-        if (json == null) throw "root json is null";
+        const json = fjson.fs || null;
+        if (json == null) throw "root fs json is null";
         if (output) Display.instance.input("Installing...\n", "setup");
         for (const e of Object.entries(json)) {
             const path = e[0];
@@ -149,6 +151,7 @@ export class System {
                 console.log(e);
             }
         }
+        system.fileSystem.write("/etc/version_hash", `${hash}\n`);
         console.groupEnd();
         if (output) {
             if (!System.isDev) {

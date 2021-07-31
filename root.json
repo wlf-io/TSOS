@@ -8,31 +8,31 @@
     "/etc/passwd": {
         "perm": "root:root:600"
     },
-    "/home/guest/test.sh": {
-        "perm": "guest:guest:744"
+    "/usr/bin/test.sh": {
+        "perm": "root:root:755"
     },
-    "/home/guest/rm.sh": {
-        "perm": "guest:guest:744"
+    "/usr/bin/rm.sh": {
+        "perm": "root:root:755"
     },
-    "/home/guest/loop.sh": {
-        "perm": "guest:guest:744"
+    "/usr/bin/loop.sh": {
+        "perm": "root:root:755"
     },
-    "/home/guest/fizzbuzz.sh": {
-        "perm": "guest:guest:744"
+    "/usr/bin/fizzbuzz.sh": {
+        "perm": "root:root:755"
     },
-    "/home/guest/fizzbuzznew.sh": {
-        "perm": "guest:guest:644"
+    "/usr/bin/fizzbuzznew.sh": {
+        "perm": "root:root:755"
     },
-    "/home/guest/nested.sh": {
-        "perm": "guest:guest:744"
+    "/usr/bin/nested.sh": {
+        "perm": "root:root:755"
     },
-    "/home/guest/array.sh": {
-        "perm": "guest:guest:744"
+    "/usr/bin/array.sh": {
+        "perm": "root:root:755"
     },
-    "/home/guest/return.sh": {
-        "perm": "guest:guest:744"
+    "/usr/bin/return.sh": {
+        "perm": "root:root:755"
     },
-    "/home/guest/conway.sh": {
-        "perm": "guest:guest:744"
+    "/usr/bin/conway.sh": {
+        "perm": "root:root:755"
     }
 }

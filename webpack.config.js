@@ -1,5 +1,6 @@
 const path = require("path");
 const { readFile, readdir, writeFile } = require("fs").promises;
+const crypto = require("crypto");
 
 const deepFiles = async function*(dir) {
     const children = await readdir(dir, { withFileTypes: true });
@@ -86,6 +87,7 @@ module.exports = env => {
                 ping: './src/bin/ping.ts',
                 cp: './src/bin/cp.ts',
                 mv: './src/bin/mv.ts',
+                conway: './src/bin/conway.ts',
             },
             output: {
                 filename: "[name].js",
@@ -114,8 +116,14 @@ module.exports = env => {
                                 fs[n] = fs[n] || {};
                                 fs[n]["content"] = (bin ? fixBins(content, r) : content).split("\r\n").join("\n");
                                 fs[n]["perm"] = fs[n]["perm"] || ("root:root:0" + (bin ? 755 : 644).toString());
+                                fs[n]["hash"] = crypto.createHash("sha256").update(fs[n]["content"]).digest("hex");
                             }
-                            await writeFile(path.resolve(__dirname, "dist/root.json"), JSON.stringify(fs, null, 2));
+                            const fsset = Object.entries(fs).map(f => f[1]["hash"]);
+                            fsset.sort();
+                            const sys = await readFile(path.resolve(__dirname, "dist/system.js"));
+                            const sysHash = crypto.createHash("sha256").update(sys).digest("hex");
+                            const hash = crypto.createHash("sha256").update(sysHash + fsset.join("")).digest("hex");
+                            await writeFile(path.resolve(__dirname, "dist/root.json"), JSON.stringify({ fs, hash }, null, 2));
                             // deepFiles(
 
                             // )

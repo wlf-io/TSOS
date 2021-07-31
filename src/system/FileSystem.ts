@@ -63,6 +63,11 @@ const queueWrite = () => {
             writeStart = 0;
             System.debug("Disk Write Done", (new Date()).toTimeString());
             System.debug("Disk Write Time", performance.now() - writeStart);
+            window.setTimeout(() => {
+                System.debug("Disk Write Pending", null);
+                System.debug("Disk Write Done", null);
+                System.debug("Disk Write Time", null);
+            }, 10000);
         }
     }, 50);
 }
@@ -116,7 +121,11 @@ export class FileSystemHandle implements iFileSystem {
 
     public write(path: string | FPath, data: string) {
         path = this.ensureFPath(path);
-        this.writeCheck(path);
+        if (this.exists(path)) {
+            this.writeCheck(path);
+        } else {
+            this.touch(path);
+        }
         this.fs.write(path, data);
     }
 
@@ -451,6 +460,8 @@ export class FileSystem {
         (new FileSystem()).mkdir(new FPath("/root", "/", "root"), permRoot);
         (new FileSystem()).mkdir(new FPath("/etc", "/", "root"), permRoot);
         (new FileSystem()).mkdir(new FPath("/etc/shell", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FPath("/usr", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FPath("/usr/bin", "/", "root"), permRoot);
 
         loadCache();
         window.onbeforeunload = () => {

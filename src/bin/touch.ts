@@ -10,22 +10,19 @@ export default class touch extends BaseApp {
             case "s":
                 this.silent = true;
                 break;
-            // case "p":
-            //     this.makeParent = true;
-            //     break;
         }
         return false;
     }
 
     public start(args: string[]): void {
 
-        args.forEach(a => {
+        for (const a of args) {
             try {
                 this.system.fileSystem.touch(a);
             } catch (e) {
-                if (!this.silent) this.output(e);
+                if (!this.silent) return this.fail(e);
             }
-        });
+        }
 
         this.endOutput("");
     }

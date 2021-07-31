@@ -66,32 +66,34 @@ func get_surround r c;
         set co -1;
         set rr $r;
         sum rr $ro;
+        
+        fromindex row $grid $rr;
+
         perfstart surround_col;
-        # perfstart while_co;
         while $co < 2;
-            # perfend while_co;
-            # perfstart set_cc;
+            # perfstart while_co;
+
             set cc $c;
             sum cc $co;
-            # perfend set_cc;
-            # perfstart get_cell;
-            get_cell $rr $cc val;
-            # perfend get_cell;
-            # perfstart centre_skip;
+
+            fromindex val $row $cc;
+
+            # get_cell 0 0 val;
+            
             if $ro == 0;
                 if $co == 0;
                     set val 0;
                 endif;
             endif;
-            # perfend centre_skip;
-            # perfstart set_val;
+            
             sum sum $val;
             sum co 1;
-            # perfend set_val;
-            # perfstart while_co;
+            
+            # perfend while_co;
         endwhile;
         # perfend while_co;
         perfend surround_col;
+        # perfout while_co;
         sum ro 1;
     endwhile;
     perfend surround;
@@ -165,8 +167,44 @@ set grid '[
 
 # echo "Grid 1: ${fromindex $grid 1}";
 
+func buildgrid x y;
+    if x < 1;
+        set x 10;
+    endif;
+    if y < 1;
+        set y $x;
+    endif;
+
+    set grid "[]";
+    set r 0;
+
+    while $r < $y;
+        set c 0;
+        set row "[]";
+
+        while $c < $x;
+
+            setindex row $row $c 0;
+
+            sum c 1;
+        endwhile;
+
+        setindex grid $grid $r $row;
+        sum r 1;    
+    endwhile;
+
+    return $grid;
+
+endfunc;
+
 
 set run 0;
+
+# buildgrid 10 10 tgrid;
+
+# echo $tgrid;
+
+# sleep 10;
 
 while $run < 10;
     output $grid;

@@ -342,6 +342,8 @@ export default class shell extends BaseApp {
         let varIsCmdBC: number = 0;
         let wrapped = false;
 
+        // this.shellRunning?.perf.start("var_replace");
+
         while (!stream.eof()) {
             const ch = stream.next();
             if (escape) {
@@ -399,6 +401,7 @@ export default class shell extends BaseApp {
                 o += ch
             }
         }
+        // this.shellRunning?.perf.end("var_replace");
 
         if (inVar) {
             o += this.getVar(varName, scopePrefix);

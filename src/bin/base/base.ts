@@ -1,4 +1,4 @@
-import { IOFeed, iOutput, iProcess, iProcessInstance, iSystem } from "../../interfaces/SystemInterfaces";
+import { iFileSystem, IOFeed, iOutput, iProcess, iProcessInstance, iSystem } from "../../interfaces/SystemInterfaces";
 
 export default abstract class BaseApp implements iProcessInstance {
 
@@ -16,9 +16,14 @@ export default abstract class BaseApp implements iProcessInstance {
 
     private inputQueue: [iOutput, string][] = [];
 
+    protected fs: iFileSystem;
+
+    protected helpText: string = "helptext missing";
+
     constructor(proc: iProcess) {
         this.proc = proc;
         this.system = proc.system;
+        this.fs = proc.fileSystem;
         let res = (_i: iOutput) => { };
         let rej = (_i: iOutput) => { };
         const prom: Promise<iOutput> = new Promise((_res, _rej) => {
@@ -77,6 +82,10 @@ export default abstract class BaseApp implements iProcessInstance {
     }
 
     protected runProcess(args: string[]) {
+        if (this.helpOutput) {
+            this.outputHelp();
+            return;
+        }
         this.start(args);
         while (this.inputQueue.length) {
             if (this.state != AppState.running) return;
@@ -118,6 +127,7 @@ export default abstract class BaseApp implements iProcessInstance {
                 });
             }
         });
+        console.log("help?", this.helpOutput);
         return remaining;
     }
 
@@ -134,6 +144,10 @@ export default abstract class BaseApp implements iProcessInstance {
 
     protected handleFlag(_flag: string, _arg: string): boolean {
         return false;
+    }
+
+    private outputHelp() {
+        this.endOutput(this.helpText);
     }
 
 }

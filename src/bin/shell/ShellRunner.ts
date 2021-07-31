@@ -35,7 +35,7 @@ export default class ShellRunner implements IOFeed {
 
     public mute: boolean = false;
 
-    private perf: PerfLog;
+    public perf: PerfLog;
 
 
     constructor(shell: shell, script: string, ident: string, scopePrefix: string = "", tag: string = "") {
@@ -101,7 +101,7 @@ export default class ShellRunner implements IOFeed {
         // if (this.shell.process.system.isDebug) console.group("Shell Runner:", this.tag);
         try {
             while (this.block < this.blocks.length) {
-                if (!this.running) return Promise.reject("cancel");
+                if (!this.running) return "";
                 const block = this.blocks[this.block].clone();
                 this.currentBlock = block;
                 args = await this.runBlock(block, this.block, block.passInput ? this.queuedOutputs : [], block.passOutput);
@@ -221,6 +221,7 @@ export default class ShellRunner implements IOFeed {
         if (name == "debug") { this.shell.process.system.debug(args[0] || "srd", args[1] || null); return ""; }
         if (name == "perfstart") { this.perf.start(args[0] || "script"); return ""; };
         if (name == "perfend") { this.perf.end(args[0] || "script"); return ""; };
+        if (name == "perfout") { console.log(args[0], this.perf.getTimes(args[0]) || []); return ""; };
         return false;
     }
 
