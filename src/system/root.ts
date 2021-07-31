@@ -1,7 +1,16 @@
-import { PathResolver } from "./FileSystem";
 import { System } from "./System";
 
-// @ts-ignore
-window.PathResolver = PathResolver;
+(() => {
 
-System.boot();
+    const ready = (fn: () => void) => {
+        if (document.readyState != 'loading') {
+            fn();
+        } else {
+            document.addEventListener('DOMContentLoaded', fn);
+        }
+
+    };
+
+    ready(() => System.boot());
+
+})();

@@ -72,7 +72,7 @@ export default class Process implements iProcess {
         let bin: string | null = null;
         let loc: string | null = this.fileSystem.resolve(location);
         if (this.fileSystem.exists(loc)) {
-            if (location.startsWith("/") || location.startsWith("./")) {
+            if (location.startsWith("/") || location.startsWith("./") || location.startsWith("~")) {
                 bin = this.fileSystem.read(loc);
             }
         }

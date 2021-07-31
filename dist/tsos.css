@@ -1,0 +1,133 @@
+body {
+    margin: 0;
+}
+
+span.col-fg-black {
+    color: var(--black);
+}
+
+span.col-fg-red {
+    color: var(--red);
+}
+
+span.col-fg-green {
+    color: var(--green);
+}
+
+span.col-fg-yellow {
+    color: var(--yellow);
+}
+
+span.col-fg-blue {
+    color: var(--blue);
+}
+
+span.col-fg-purple {
+    color: var(--purple);
+}
+
+span.col-fg-cyan {
+    color: var(--cyan);
+}
+
+span.col-fg-white {
+    color: var(--white);
+}
+
+span.col-bg-black {
+    background-color: var(--black);
+}
+
+span.col-bg-red {
+    background-color: var(--red);
+}
+
+span.col-bg-green {
+    background-color: var(--green);
+}
+
+span.col-bg-yellow {
+    background-color: var(--yellow);
+}
+
+span.col-bg-blue {
+    background-color: var(--blue);
+}
+
+span.col-bg-purple {
+    background-color: var(--purple);
+}
+
+span.col-bg-cyan {
+    background-color: var(--cyan);
+}
+
+span.col-bg-white {
+    background-color: var(--white);
+}
+
+#main-display {
+    background-color: black;
+    width: 100vw;
+    height: 100vh;
+    overflow-y: scroll;
+    overflow-x: hidden;
+    white-space: pre-wrap;
+}
+
+#main-display>span {
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: bold;
+    display: block;
+    color: var(--white);
+    min-height: 1rem;
+    position: relative;
+    /* white-space: pre; */
+}
+
+@keyframes borderBlink {
+    from,
+    to {
+        border-color: white
+    }
+    50% {
+        border-color: transparent
+    }
+}
+
+
+/* 
+        #main-display span:last-child span:last-child {
+            border-right: white solid 1px;
+            animation: borderBlink 1s step-end infinite;
+        } */
+
+.caret-span {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    /* background-color: #FFF4; */
+    border-right: white solid 1px;
+    animation: borderBlink 1s step-end infinite;
+}
+
+body {
+    overflow: hidden;
+}
+
+#debug {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background-color: transparent;
+    border: red solid 1px;
+    min-height: 1rem;
+    min-width: 10rem;
+    margin: 2px;
+    color: red;
+}
+
+
+/* #main-display>span>span {
+            border: white 1px solid;
+        } */

@@ -1,7 +1,9 @@
 #!/bin/shell
 
-setenv PS1 "\033[0m\033[32m\$USER@\033[32m\$HOSTNAME\033[0m:\033[34m\${pwd -a}\033[0m\$\$ ";
+setenv PS1 "\033[0m\033[32m\$USER@\033[32m\$HOSTNAME\033[0m:\033[34m\$CWD_SHORT\033[0m\$\$ ";
 
-setenv HOSTNAME "wlf.io";
+setenv HOSTNAME ${hostname -e};
 
-
+if ~/.profile is exec;
+    ~/.profile;
+endif;

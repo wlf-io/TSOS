@@ -1,4 +1,5 @@
 import { iOutput, iProcess } from "../interfaces/SystemInterfaces";
+import { default as E } from "../shared/EscapeCodes";
 import LexerStream from "../shared/LexerStream";
 import BaseApp from "./base/base";
 import ShellRunner from "./shell/ShellRunner";
@@ -20,6 +21,8 @@ export default class shell extends BaseApp {
     private shellRunning: ShellRunner | null = null;
     private subRunners: ShellRunner[] = [];
 
+    private profile: boolean = true;
+
     protected handleFlag(flag: string, arg: string): boolean {
         switch (flag.toLowerCase()) {
             case "motd":
@@ -36,6 +39,9 @@ export default class shell extends BaseApp {
             case "t":
             case "test":
                 this.test = true;
+                break;
+            case "p":
+                this.profile = false;
                 break;
         }
         return false;
@@ -68,7 +74,7 @@ export default class shell extends BaseApp {
         if (typeof input != "string") {
             throw "USER INPUT ARRAY???";
         }
-        if (input == "\u0018") {
+        if (input == E.CANCEL) {
             if (this.shellRunning == null && this.subRunners.length < 1) {
                 if (this.script == null && this.command == false) {
                     this.inputStr = "";
@@ -86,7 +92,7 @@ export default class shell extends BaseApp {
         } else {
             switch (input) {
                 case "Enter":
-                    this.output("\u001B[0m");
+                    this.output(`${E.ESC}[0m`);
                     this.output("\n");
                     if (this.inputStr.length) {
                         this.historyIndex = -1;
@@ -108,11 +114,20 @@ export default class shell extends BaseApp {
                     console.log("TODO : auto-complete")
                     break;
                 case "Backspace":
-                    if (this.inputStr.length > 0) {
-                        this.inputStr = this.inputStr.substring(0, this.inputStr.length - 1);
-                        this.output("\b");
+                    if (this.inputStr.length > 0 && this.column > 0) {
+                        this.inputStr = this.inputStr.substring(0, this.column - 1) + this.inputStr.substring(this.column);
+                        this.column--;
+                        this.output(E.BACKSPACE);
                     } else {
-                        this.output("\u0007");
+                        this.output(E.BELL);
+                    }
+                    break;
+                case "Delete":
+                    if (this.inputStr.length > 0 && this.column < this.inputStr.length) {
+                        this.inputStr = this.inputStr.substring(0, this.column) + this.inputStr.substring(this.column + 1);
+                        this.output(E.DELETE);
+                    } else {
+                        this.output(E.BELL);
                     }
                     break;
                 case "ArrowUp":
@@ -124,6 +139,7 @@ export default class shell extends BaseApp {
                     this.nav(input == "ArrowLeft" ? -1 : 1);
                     break;
                 case "Home":
+                    this.output((new Array(0 - this.column).join("")))
                     break;
                 case "End":
                     break;
@@ -131,15 +147,16 @@ export default class shell extends BaseApp {
                     this.addToInput(input);
                     break;
             }
-            this.output(`\u001B[S\u001B[H${this.column}\u001B[U`)
+            this.system.debug("Shell Column", this.column.toString());
         }
     }
 
-    private async runInput(input: string): Promise<any> {
-        const runner = new ShellRunner(this, input, "shell_exec");
+    private async runInput(input: string, mute: boolean = false, tag: string = ""): Promise<any> {
+        const runner = new ShellRunner(this, input, "shell_exec", undefined, tag || input);
         // console.log("RUN INPUT", input);
         runner.test = this.test;
         this.shellRunning = runner;
+        runner.mute = mute;
         await runner.run();
         this.clearScopedVars();
         this.shellRunning = null;
@@ -148,9 +165,9 @@ export default class shell extends BaseApp {
     private addToInput(ch: string) {
         this.inputStr = this.inputStr.substring(0, this.column) + ch + this.inputStr.substring(this.column);
         if (this.column < this.inputStr.length - ch.length) {
-            this.output("\u001B[K");
+            this.output(`${E.ESC}[K`);
             this.output(this.inputStr.substr(this.column));
-            this.output((new Array(this.inputStr.length - this.column)).join("\u001B[D"));
+            this.output((new Array(this.inputStr.length - this.column)).join(`${E.ESC}[D`));
         } else {
             this.output(ch);
         }
@@ -176,8 +193,8 @@ export default class shell extends BaseApp {
         if (this.historyIndex < -1) this.historyIndex = -1;
         if (item.length > 0 || this.historyIndex == -1) {
             this.inputStr = "";
-            this.output((new Array(this.column + 1)).join("\u001B[D"));
-            this.output("\u001B[K");
+            this.output((new Array(this.column + 1)).join(`${E.ESC}[D`));
+            this.output(`${E.ESC}[K`);
             //await this.prompt();
             this.column = 0;
             if (item.length > 0) this.addToInput(item);
@@ -196,7 +213,7 @@ export default class shell extends BaseApp {
             if (this.column == this.inputStr.length) return;
             this.column++;
         }
-        this.output(`\u001B[${dir}${dirC}`);
+        this.output(`${E.ESC}[${dir}${dirC}`);
     }
 
     async start(args: string[]) {
@@ -206,7 +223,7 @@ export default class shell extends BaseApp {
         // console.log("START", this.script, this.command, this.motd);
         if (this.script != null) {
             const input = this.system.fileSystem.read(this.script);
-            await this.runInput(input);
+            await this.runInput(input, undefined, this.script);
             this.endOutput("");
         } else if (this.command) {
 
@@ -228,10 +245,14 @@ export default class shell extends BaseApp {
 
     private async setup(): Promise<any> {
         try {
-            if (this.system.fileSystem.exists("/etc/shell/profile")) {
+            if (this.profile && this.system.fileSystem.exists("/etc/shell/profile")) {
                 const test = this.test;
                 this.test = false;
-                await this.runInput(this.system.fileSystem.read("/etc/shell/profile"));
+                try {
+                    await this.runInput(this.system.fileSystem.read("/etc/shell/profile"), this.script != null || this.command, "/etc/shell/profile");
+                } catch (e) {
+                    console.log(e);
+                }
                 // console.log("SETUP");
                 this.test = test;
             }
@@ -334,7 +355,7 @@ export default class shell extends BaseApp {
                         if (varName.length) {
                             const runner = new ShellRunner(this, varName, "shell_exec", scopePrefix);
                             this.subRunners.push(runner);
-                            runner.out = false;
+                            runner.mute = true;
                             // console.log("VAR REPLCE RUN", varName);
                             let out = await runner.run();
                             this.subRunners.pop();

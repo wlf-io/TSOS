@@ -1,6 +1,6 @@
 import LexerStream from "../../shared/LexerStream";
 
-type LexToke = { s: RegExp, e: RegExp | null };
+type LexToke = { s: RegExp, e: null | ((ch: string, ne: string, i: number) => boolean) };
 
 export default class DisplayLexer {
     private input: LexerStream;
@@ -62,17 +62,19 @@ export default class DisplayLexer {
         if (end == null) {
             return this.input.next();
         } else {
-            return this.readUntil(s => end.test(s));
+            return this.readUntil(end);
         }
     }
 
 
-    private readUntil(func: (current: string, next: string) => boolean): string {
+    private readUntil(func: (current: string, next: string, index: number) => boolean): string {
         let str = "";
+        let i = 0;
         while (!this.input.eof()) {
             const s = this.input.next();
             str += s;
-            if (func(s, this.input.peek())) break;
+            if (func(s, this.input.peek(), i)) break;
+            i++;
         }
         return str;
     }

@@ -1,9 +1,11 @@
 import { IOFeed, iOutput, iProcess } from "../../interfaces/SystemInterfaces";
 import shell from "../shell";
-import ShellBlocker from "./ShellBlocker";
-import { ShellToken } from "./ShellLexer";
+import ShellBlocker, { ShellBlock } from "./ShellBlocker";
+// import { ShellToken } from "./ShellLexer";
 
 export default class ShellRunner implements IOFeed {
+
+    private tag: string = "";
 
     private blocker: ShellBlocker;
     private shell: shell;
@@ -17,10 +19,8 @@ export default class ShellRunner implements IOFeed {
 
     public test: boolean = false;
 
-    public out: boolean = true;
-
     private block: number = 0;
-    private blocks: ShellToken[][] = [];
+    private blocks: ShellBlock[] = [];
 
 
     private funcs: { [k: string]: { block: number, endBlock: number, args: string[] } } = {};
@@ -28,12 +28,22 @@ export default class ShellRunner implements IOFeed {
 
     private scopePrefix: string;
 
+    private queuedOutputs: iOutput[] = [];
 
-    constructor(shell: shell, script: string, ident: string, scopePrefix: string = "") {
+    private currentBlock: ShellBlock | null = null;
+
+    public mute: boolean = false;
+
+    private perf: PerfLog;
+
+
+    constructor(shell: shell, script: string, ident: string, scopePrefix: string = "", tag: string = "") {
         this.shell = shell;
+        this.tag = tag || script.substr(0, 15);
         this.blocker = new ShellBlocker(script);
         this.ident = ident;
         this.scopePrefix = scopePrefix;
+        this.perf = new PerfLog();
     }
 
     public end() {
@@ -49,10 +59,15 @@ export default class ShellRunner implements IOFeed {
     input(input: iOutput, ident: string | null): void {
         switch (ident) {
             case "user":
-                this.currentProc?.input(input, ident);
+                if (!(this.currentBlock?.passInput ?? false) && !this.mute) {
+                    this.currentProc?.input(input, ident);
+                }
                 break;
             case this.currentProcIdent:
                 this.output(input, ident);
+                break;
+            case this.currentProcIdent + "_pass":
+                this.queuedOutputs.push(input);
                 break;
             default:
                 console.log("Shell runner lost input", input, ident);
@@ -61,26 +76,41 @@ export default class ShellRunner implements IOFeed {
     }
 
     private output(output: iOutput, _ident: string | null) {
-        if (!this.out) return;
+        if (this.mute) return;
         this.shell.input(output, this.ident);
     }
 
+    // private currentBlock() {
+    //     const block = new 
+    // }
+
     public async run(): Promise<iOutput> {
         if (this.running) Promise.reject("running");
+        this.perf = new PerfLog();
+        this.perf.start("run");
         this.running = true;
-        this.blocks = this.blocker.getBlocks().filter(b => b.length);
+        this.perf.start("blocking");
+        this.blocks = this.blocker.getBlocks().filter(b => b.tokens.length);
+        this.perf.end("blocking");
         this.block = 0;
         let args: iOutput = [];
+        if (this.shell.process.system.isDebug) console.group("Shell Runner:", this.tag);
         try {
             while (this.block < this.blocks.length) {
-                // console.log("RUN BLOCK", [...this.blocks[this.block]]);
-                args = await this.runBlock([...this.blocks[this.block]], this.block);
+                const block = this.blocks[this.block].clone();
+                this.currentBlock = block;
+                args = await this.runBlock(block, this.block, block.passInput ? this.queuedOutputs : [], block.passOutput);
                 // console.log("run");
+                // console.log("Runner step out", args);
                 this.block++;
             }
         } catch (e) {
             this.output(e.toString(), "error");
         }
+        this.perf.end("run");
+        if (this.shell.process.system.isDebug) console.log(this.perf.perf().join("\n"));
+        if (this.shell.process.system.isDebug) console.groupEnd();
+        this.shell.process.system.debug("runner time", this.perf.total("run"));
         return Promise.resolve(args);
         // return blocks.reduce(
         //     (p, tokes) => this.chainBlock(p, tokes)
@@ -96,13 +126,14 @@ export default class ShellRunner implements IOFeed {
     //     );
     // }
 
-    private async runBlock(tokes: ShellToken[], block: number): Promise<iOutput> {
+    private async runBlock(block: ShellBlock, blockNumber: number, input: iOutput[], passOut: boolean): Promise<iOutput> {
+        const tokes = block.tokens;
         if (tokes.length < 1) return Promise.resolve("");
         if (!this.running) return Promise.reject("canceled");
 
         const vtokes = [];
         for (const t of tokes) {
-            const r = await this.shell.varReplace(t.value, this.varScopePrefix, this.getBlockStartLine(block));
+            const r = await this.shell.varReplace(t.value, this.varScopePrefix, this.getBlockStartLine(blockNumber));
             vtokes.push(r);
         }
 
@@ -113,19 +144,36 @@ export default class ShellRunner implements IOFeed {
         }
         const name = vtokes.shift() || "";
 
-        if (name == "set") console.log("RUN", tokes.map(t => t.value), vtokes);
+        // if (name == "set") console.log("RUN", tokes.map(t => t.value), vtokes);
 
-        const internal: any = await this.handleInternal(name, vtokes, block);
+        this.perf.start("internal");
+        const internal: any = await this.handleInternal(name, vtokes, blockNumber);
         if (internal !== false) {
-            return Promise.resolve(internal);
+            this.perf.end("internal");
+            return internal;
+
         }
 
+        this.perf.start("createproc");
         const proc = this.shell.process.createProcess(name, vtokes);
+        this.perf.end("createproc");
         this.currentProc = proc;
         this.currentProcIdent = `${name}[${proc.pid}]`;
-        proc.hookOut(this, this.currentProcIdent);
+        if (input.length) {
+            console.log(JSON.stringify(input));
+            while (input.length) {
+                proc.input(input.shift() || "", "");
+            }
+        } else {
+            proc.input("", "");
+        }
+        this.queuedOutputs = [];
+        proc.hookOut(this, this.currentProcIdent + (passOut ? "_pass" : ""));
         try {
-            return await proc.run();
+            this.perf.start("proc");
+            const arg = await proc.run();
+            this.perf.end("proc");
+            return arg;
         } catch (e) {
             throw e;
         }
@@ -160,6 +208,8 @@ export default class ShellRunner implements IOFeed {
         if (name == "fromindex") return this.fromIndex(args, block);
         if (name == "pop") return this.pop(args, block);
         if (name == "push") return this.push(args, block);
+        if (name == "log") { console.log(args); return ""; }
+        if (name == "debug") { this.shell.process.system.debug(args[0] || "srd", args[1] || null); return ""; }
         return Promise.resolve(false);
     }
 
@@ -167,7 +217,7 @@ export default class ShellRunner implements IOFeed {
         let depth = 1;
         const index = this.blocks.findIndex((b, i) => {
             if (i <= block) return false;
-            const n = ((b[0]?.value) || "").trim().toLowerCase();
+            const n = ((b.tokens[0]?.value) || "").trim().toLowerCase();
             if (n == "if" || n == "ifnot") depth++;
             if (n == "endif") {
                 depth--;
@@ -233,7 +283,7 @@ export default class ShellRunner implements IOFeed {
         let index: number | null = null;
         while (--i >= 0) {
             const b = this.blocks[i];
-            const n = ((b[0]?.value) || "").trim().toLowerCase();
+            const n = ((b.tokens[0]?.value) || "").trim().toLowerCase();
             if (n == "endwhile") depth++;
             if (n == "while") depth--;
             if (n == "while" && depth < 1) {
@@ -292,7 +342,7 @@ export default class ShellRunner implements IOFeed {
         const name = args.shift() || "";
         const index = this.blocks.findIndex((b, i) => {
             if (i <= block) return false;
-            const n = (b[0]?.value || "").trim().toLowerCase();
+            const n = (b.tokens[0]?.value || "").trim().toLowerCase();
             if (n == "func") throw `cannot nest funcs: : Line ${this.getBlockStartLine(block)}\n`;
             return n == "endfunc";
         });
@@ -311,7 +361,7 @@ export default class ShellRunner implements IOFeed {
 
     private goto(label: string, block: number) {
         const index = this.blocks.findIndex(block => {
-            return (block[0]?.value || "") == `:${label}`;
+            return (block.tokens[0]?.value || "") == `:${label}`;
         });
         if (index < 1) {
             throw `goto needs label :${label}: Line ${this.getBlockStartLine(block)}\n`;
@@ -434,7 +484,7 @@ export default class ShellRunner implements IOFeed {
             let depth = 1;
             const index = this.blocks.findIndex((b, i) => {
                 if (i <= block) return false;
-                const n = (b[0]?.value || "").trim().toLowerCase();
+                const n = (b.tokens[0]?.value || "").trim().toLowerCase();
                 if (n == start) depth++;
                 if (n == end || (depth == 1 && n === endAlt)) depth--;
                 return depth < 1 && (n == end || n === endAlt);
@@ -452,6 +502,8 @@ export default class ShellRunner implements IOFeed {
         switch (b.toLowerCase()) {
             case "file":
                 return this.shell.process.fileSystem.isFile(a.trim());
+            case "exec":
+                return this.shell.process.fileSystem.canExecute(a.trim()) && this.shell.process.fileSystem.isFile(a.trim());
             case "dir":
                 return this.shell.process.fileSystem.isDir(a.trim());
             case "int":
@@ -464,7 +516,7 @@ export default class ShellRunner implements IOFeed {
     }
 
     private getBlockStartLine(block: number): number {
-        return (this.blocks[block][0]?.line) || -1;
+        return (this.blocks[block]?.tokens[0]?.line) || -1;
     }
 
     private arrayIffy(arg: string): string[] {
@@ -485,4 +537,59 @@ export default class ShellRunner implements IOFeed {
         );
     }
 
+}
+
+class PerfLog {
+    private data: { [k: string]: number[] } = {};
+
+    private starts: { [k: string]: number } = {};
+
+    public start(k: string) {
+        this.starts[k] = performance.now();
+    }
+
+    public end(k: string) {
+        const e = performance.now();
+        if (!this.data.hasOwnProperty(k)) this.data[k] = [];
+        this.data[k].push(e - (this.starts[k] || 9));
+    }
+
+    public getTimes(k: string): number[] {
+        return this.data[k] || [];
+    }
+
+    public total(k: string): number {
+        return this.getTimes(k).reduce((a, b) => a + b, 0);
+    }
+
+    public count(k: string): number {
+        return this.getTimes(k).length;
+    }
+
+    public average(k: string) {
+        return this.total(k) / this.count(k);
+    }
+
+    public perf(): string[] {
+        const s = Object.keys(this.data).map(k => {
+            return [
+                this.padTab(k, 3),
+                this.padTab(this.count(k), 3),
+                this.padTab(this.total(k), 3),
+                this.padTab(this.average(k), 3),
+            ].join("");
+        });
+
+        s.unshift("Key\t\tcount\t\ttotal\t\taverage");
+        return s;
+    }
+
+    private padTab(txt: string | number, tabs: number) {
+        if (typeof txt != "string") {
+            if ((txt % 1) != 0) txt = txt.toFixed(3);
+            txt = txt.toString();
+        }
+        const c = Math.ceil(((8 * tabs) - (txt.length)) / 8);
+        return txt + (new Array(c)).join("\t");
+    }
 }

@@ -3,6 +3,8 @@ export interface iSystem {
     user: iUserIdent;
     clone(): iSystem;
     createProcess(bin: string, args: string[], creator: iProcess): iProcess;
+    debug(key: string, value: any): void;
+    isDebug: boolean;
 }
 
 export interface iUserIdent {
@@ -28,6 +30,9 @@ export interface iFAccess {
     canRead(user: iUserIdent): boolean;
     canWrite(user: iUserIdent): boolean;
     canExecute(user: iUserIdent): boolean;
+    setOwner(owner: string): void;
+    setGroup(group: string): void;
+    setPerm(perm: string): void;
 }
 
 export interface iFileSystem {
@@ -53,6 +58,8 @@ export interface iFileSystem {
     getPerm(path: string): iFAccess
     abreviate(path: string): string;
     delete(path: string): void;
+    cp(from: string, to: string, force?: boolean): void;
+    mv(from: string, to: string, force?: boolean): void;
 }
 
 export type iOutput = string | string[] | string[][];

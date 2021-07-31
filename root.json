@@ -20,6 +20,9 @@
     "/home/guest/fizzbuzz.sh": {
         "perm": "guest:guest:744"
     },
+    "/home/guest/fizzbuzznew.sh": {
+        "perm": "guest:guest:644"
+    },
     "/home/guest/nested.sh": {
         "perm": "guest:guest:744"
     },

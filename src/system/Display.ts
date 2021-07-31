@@ -380,7 +380,13 @@ class DisplayInstance implements IOFeed {
         const linesAffected: number[] = [];
 
         const lex = DisplayLexer.createFromString(input, [
-            { s: /[\u001B]/, e: /[a-zA-Z]/ },
+            {
+                s: /[\u001B]/, e: (ch, _n, i) => {
+                    if (i == 0) return false;
+                    if (i == 1) return ch != "[";
+                    return /[\u0040-\u007E]/.test(ch);
+                }
+            },
             { s: /[\u0000-\u001A\u007F]/, e: null },
         ]);
 

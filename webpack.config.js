@@ -1,7 +1,7 @@
 const path = require("path");
 const { readFile, readdir, writeFile } = require("fs").promises;
 
-const deepFiles = async function* (dir) {
+const deepFiles = async function*(dir) {
     const children = await readdir(dir, { withFileTypes: true });
     for (const child of children) {
         const p = path.resolve(dir, child.name);
@@ -25,18 +25,16 @@ const fixBins = (bin, path) => {
 
 const config = {
     module: {
-        rules: [
-            {
-                test: /\.tsx?$/,
-                use: [{
-                    loader: "ts-loader",
-                    options: {
-                        configFile: "tsconfig.json"
-                    }
-                }],
-                exclude: /node_modules/
-            }
-        ]
+        rules: [{
+            test: /\.tsx?$/,
+            use: [{
+                loader: "ts-loader",
+                options: {
+                    configFile: "tsconfig.json"
+                }
+            }],
+            exclude: /node_modules/
+        }]
     },
     resolve: {
         extensions: [".tsx", ".ts", ".js"],
@@ -82,59 +80,61 @@ module.exports = [
             pid: './src/bin/pid.ts',
             exit: './src/bin/exit.ts',
             watch: './src/bin/watch.ts',
+            write: './src/bin/write.ts',
+            ping: './src/bin/ping.ts',
+            cp: './src/bin/cp.ts',
+            mv: './src/bin/mv.ts',
         },
         output: {
             filename: "[name].js",
             path: path.resolve(__dirname, "dist/root/bin"),
         },
-        plugins: [
-            {
-                apply: (compiler) => {
-                    compiler.hooks.afterEmit.tap(
-                        "JsonBinPlugin",
-                        async (compilation) => {
-                            const root = path.resolve(__dirname, "dist/root");
-                            let json = "{}"
-                            try {
-                                json = await readFile(path.resolve(__dirname, "root.json"), "utf-8");
-                            } catch (e) {
-                                console.log(e);
-                            }
-                            const fs = JSON.parse(json);
-                            for await (const f of deepFiles(root)) {
-                                const [p, content] = f;
-                                if (p.endsWith(".map")) continue;
-                                const r = (p.split(root)[1] || "").split("\\").join("/");
-                                const bin = r.endsWith(".js");
-                                const n = bin ? r.substring(0, r.length - 3) : r;
-                                fs[n] = fs[n] || {};
-                                fs[n]["content"] = (bin ? fixBins(content, r) : content).split("\r\n").join("\n");
-                                fs[n]["perm"] = fs[n]["perm"] || ("root:root:0" + (bin ? 755 : 644).toString());
-                            }
-                            await writeFile(path.resolve(__dirname, "dist/root.json"), JSON.stringify(fs, null, 2));
-                            // deepFiles(
-
-                            // )
-                            // fs.readdir(
-                            //     path.resolve(__dirname, "root"),
-                            //     (err, files) => {
-                            //         const srcs = {};
-                            //         files
-                            //             .filter(f => !f.endsWith(".map"))
-                            //             .forEach(file => {
-                            //                 let content = fs.readFileSync(path.resolve(__dirname, "dist/bin", file), "utf-8");
-                            //                 
-
-                            //                 srcs[file.substr(0, file.length - 3)] = content;
-                            //             });
-                            //         fs.writeFileSync(path.resolve(__dirname, "dist/bin.json"), JSON.stringify(srcs, null, 2));
-                            //         console.log("Output BIN JSON");
-                            //     }
-                            // );
+        plugins: [{
+            apply: (compiler) => {
+                compiler.hooks.afterEmit.tap(
+                    "JsonBinPlugin",
+                    async(compilation) => {
+                        const root = path.resolve(__dirname, "dist/root");
+                        let json = "{}"
+                        try {
+                            json = await readFile(path.resolve(__dirname, "root.json"), "utf-8");
+                        } catch (e) {
+                            console.log(e);
                         }
-                    )
-                }
+                        const fs = JSON.parse(json);
+                        for await (const f of deepFiles(root)) {
+                            const [p, content] = f;
+                            if (p.endsWith(".map")) continue;
+                            const r = (p.split(root)[1] || "").split("\\").join("/");
+                            const bin = r.endsWith(".js");
+                            const n = bin ? r.substring(0, r.length - 3) : r;
+                            fs[n] = fs[n] || {};
+                            fs[n]["content"] = (bin ? fixBins(content, r) : content).split("\r\n").join("\n");
+                            fs[n]["perm"] = fs[n]["perm"] || ("root:root:0" + (bin ? 755 : 644).toString());
+                        }
+                        await writeFile(path.resolve(__dirname, "dist/root.json"), JSON.stringify(fs, null, 2));
+                        // deepFiles(
+
+                        // )
+                        // fs.readdir(
+                        //     path.resolve(__dirname, "root"),
+                        //     (err, files) => {
+                        //         const srcs = {};
+                        //         files
+                        //             .filter(f => !f.endsWith(".map"))
+                        //             .forEach(file => {
+                        //                 let content = fs.readFileSync(path.resolve(__dirname, "dist/bin", file), "utf-8");
+                        //                 
+
+                        //                 srcs[file.substr(0, file.length - 3)] = content;
+                        //             });
+                        //         fs.writeFileSync(path.resolve(__dirname, "dist/bin.json"), JSON.stringify(srcs, null, 2));
+                        //         console.log("Output BIN JSON");
+                        //     }
+                        // );
+                    }
+                )
             }
-        ],
+        }],
     }),
 ];

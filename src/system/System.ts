@@ -1,13 +1,11 @@
 import { UserIdent } from "./UserIdent";
-import { FileSystemHandle, PathResolver } from "./FileSystem";
+import { FileSystem, FileSystemHandle } from "./FileSystem";
 import { iProcess, iSystem, IOFeed, iFileSystem } from "../interfaces/SystemInterfaces";
 import Display from "./Display";
 import Process from "./Process";
 
 
 export class SystemHandle implements iSystem {
-    public readonly PathResolver = PathResolver;
-
     private _user: UserIdent;
     private fs: iFileSystem;
 
@@ -28,6 +26,14 @@ export class SystemHandle implements iSystem {
         const user = this.user.clone();
         const fs = this.fs.clone(user);
         return new SystemHandle(user, fs);
+    }
+
+    public debug(key: string, value: any) {
+        System.debug(key, value);
+    }
+
+    public get isDebug(): boolean {
+        return System.isDebug;
     }
 
     public createSystemHandle(name: string, pass: string | null = null): SystemHandle {
@@ -58,6 +64,37 @@ export class System {
     private static inputHooks: IOFeed[] = [];
     private static rootHash: string = "";
 
+
+    private static debugging: boolean = false;
+
+    private static _debug: { [k: string]: string } = {};
+
+    public static debug(key: string, value: any): void {
+        if (value == null) {
+            if (System._debug.hasOwnProperty(key)) {
+                delete System._debug[key];
+            }
+        } else {
+            System._debug[key] = value;
+        }
+        const pre = document.getElementById("debug");
+        if (pre instanceof HTMLElement) {
+            pre.textContent = JSON.stringify(System._debug, null, 2);
+        }
+    }
+
+    public static get isDebug(): boolean {
+        return System.debugging;
+    }
+
+    private static toggleDebug() {
+        System.debugging = !System.debugging;
+        const pre = document.getElementById("debug");
+        if (pre instanceof HTMLElement) {
+            pre.style.display = System.isDebug ? "block" : "none";
+        }
+    }
+
     public static createProcess(bin: string, system: iSystem, args: string[], creator: iProcess | null): iProcess {
         let next = null;
         try {
@@ -70,6 +107,7 @@ export class System {
     }
 
     public static setup(system: iSystem) {
+        if (System.isDev) System.toggleDebug();
         return System.loadRoot(system, () => true, true)
             .then(() => {
                 if (System.isDev) {
@@ -125,7 +163,8 @@ export class System {
         return location.hostname == "127.0.0.1";
     }
 
-    public static boot(): void {
+    public static async boot() {
+        await FileSystem.boot();
         const root = new UserIdent("root", ["root"]);
         const rootSysHandle = new SystemHandle(root);
         document.onkeypress = ev => {
@@ -142,6 +181,7 @@ export class System {
                 case "ArrowRight":
                 case "Home":
                 case "End":
+                case "Delete":
                     System.keyInput(ev.key);
                     return false;
                 case "c":
@@ -149,6 +189,18 @@ export class System {
                         System.keyInput("\u0018");
                         return false;
                     }
+                case "a":
+                    if (ev.ctrlKey) return false;
+                    break;
+                case "d":
+                    if (ev.ctrlKey && ev.altKey) {
+                        System.toggleDebug();
+                        return false;
+                    }
+                case "Alt":
+                case "Shift":
+                case "Control":
+                    break;
                 default:
                     // console.log(ev);
                     break;

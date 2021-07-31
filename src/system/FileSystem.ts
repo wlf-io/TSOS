@@ -1,6 +1,20 @@
 import { iFAccess, iFileSystem, iUserIdent } from "../interfaces/SystemInterfaces";
+import { FPath, FSAccess, FSType } from "./filesystem/FSModels";
+import PathResolver from "./filesystem/PathResolver";
+import { System } from "./System";
 
 const _setItem = Storage.prototype.setItem;
+const _getItem = Storage.prototype.getItem;
+const _removeItem = Storage.prototype.removeItem;
+Storage.prototype.setItem = (_key: string, _value: string) => {
+    throw "Blocked";
+};
+Storage.prototype.getItem = (_key: string) => {
+    throw "Blocked";
+};
+Storage.prototype.removeItem = (_key: string) => {
+    throw "Blocked";
+};
 
 const _cache: { [k: string]: string } = {};
 let _cachePending: string[] = [];
@@ -12,258 +26,76 @@ const setItem = (key: string, value: string) => {
     queueWrite();
 }
 
+const loadCache = () => {
+    Object.keys(window.localStorage).forEach(k => {
+        _cache[k] = _getItem.apply(window.localStorage, [k]) || "";
+    });
+}
+
+const getKeys = (): string[] => {
+    return Object.keys(_cache);
+}
+
 let writeTick: number | null = null;
+let writeStart: number = 0;
 const queueWrite = () => {
     if (writeTick !== null) return;
+    if (writeStart == 0) {
+        System.debug("Disk Write Pending", _cachePending.length);
+        System.debug("Disk Write Done", null);
+        System.debug("Disk Write Time", null);
+        writeStart = performance.now();
+    }
     writeTick = window.setTimeout(() => {
         if (_cachePending.length > 0) {
             const key = _cachePending.shift();
             if (key) {
-                _setItem.apply(window.localStorage, [key, _cache[key]]);
-                // console.log(key);
+                if (_cache.hasOwnProperty(key)) {
+                    _setItem.apply(window.localStorage, [key, _cache[key]]);
+                }
             }
         }
         writeTick = null;
+        System.debug("Disk Write Pending", _cachePending.length);
         if (_cachePending.length > 0) {
             queueWrite();
+        } else {
+            writeStart = 0;
+            System.debug("Disk Write Done", (new Date()).toTimeString());
+            System.debug("Disk Write Time", performance.now() - writeStart);
         }
-    }, 100);
+    }, 50);
 }
 
-const _getItem = Storage.prototype.getItem;
+const forceSaveCache = () => {
+    if (writeTick != null) {
+        window.clearTimeout(writeTick);
+    }
+    _cachePending.forEach(key => {
+        if (_cache.hasOwnProperty(key)) {
+            _setItem.apply(window.localStorage, [key, _cache[key]]);
+        }
+    });
+    console.log(`Wrote ${_cachePending.length} keys`);
+};
+
 
 const getItem = (key: string): string | null => {
-    if (!_cache.hasOwnProperty(key)) {
-        const get = _getItem.apply(window.localStorage, [key]);
-        if (get != null) _cache[key] = get;
-    }
+    // if (!_cache.hasOwnProperty(key)) {
+    //     const get = _getItem.apply(window.localStorage, [key]);
+    //     if (get != null) _cache[key] = get;
+    // }
     return _cache[key] || null;
 }
 
-Storage.prototype.setItem = (_key: string, _value: string) => {
-    throw "Blocked";
-};
-
-export enum FSPerm {
-    execute = 1,
-    write = 2,
-    read = 4,
-}
-
-export class FSAccess implements iFAccess {
-    private _owner: string;
-    private _group: string;
-    private perms: { [k: string]: number } = {
-        user: 0,
-        group: 0,
-        other: 0,
-    };
-
-    public accessTime: number;
-    public modifyTime: number;
-    public changeTime: number;
-    public createTime: number;
-    public accessUndefined: boolean = false;
-
-    constructor(perm: string, owner: string, group: string, accessTime?: number, modifyTime?: number, changeTime?: number, createTime?: number) {
-        this.setPerm(perm);
-        this._owner = owner;
-        this._group = group;
-        if (accessTime === undefined) this.accessUndefined = true;
-        this.accessTime = accessTime || (Date.now() / 1000 | 0);
-        this.modifyTime = modifyTime || (Date.now() / 1000 | 0);
-        this.changeTime = changeTime || (Date.now() / 1000 | 0);
-        this.createTime = createTime || (Date.now() / 1000 | 0);
+const removeItem = (key: string) => {
+    if (_cache.hasOwnProperty(key)) {
+        delete _cache[key];
     }
-
-    public get permString(): string {
-        return `0${this.perms.user}${this.perms.group}${this.perms.other}`;
-    }
-
-    public get longPermString(): string {
-        return [
-            this.permToLongString(this.perms.user),
-            this.permToLongString(this.perms.group),
-            this.permToLongString(this.perms.other),
-        ].join("");
-    }
-
-    private permToLongString(perm: number) {
-        return [
-            this.permTest(perm, FSPerm.read) ? "r" : "-",
-            this.permTest(perm, FSPerm.write) ? "w" : "-",
-            this.permTest(perm, FSPerm.execute) ? "x" : "-",
-        ].join("");
-    }
-
-    public static fromAccessString(str: string): FSAccess {
-        const parts = str.split(":");
-        if (parts.length > 3) {
-            return new FSAccess(parts[2], parts[0], parts[1], parseInt(parts[3]) || undefined, parseInt(parts[4]) || undefined, parseInt(parts[5]) || undefined, parseInt(parts[6]) || undefined);
-        } else if (parts.length == 3) {
-            return new FSAccess(parts[2], parts[0], parts[1]);
-        }
-        throw "Invalid Access String: " + str;
-    }
-
-    // public getListArray(octet: boolean = false): string[] {
-    //     return [
-    //         octet ? this.permString : this.longPermString,
-    //         "0",
-    //         this.owner,
-    //         this.group,
-    //         "0"
-    //     ];
-    // }
-
-    public get owner(): string {
-        return this._owner;
-    }
-
-    public get group(): string {
-        return this._group;
-    }
-
-    public setOwner(owner: string): void {
-        this._owner = owner;
-    }
-
-    public setGroup(group: string): void {
-        this._group = group;
-    }
-
-    public setPerm(perm: string) {
-        if (!/^[0-7]{3,4}$/.test(perm)) throw "perm must be in 777 or 0777 format";
-        this.perms.other = parseInt(perm.substr(perm.length - 1, 1));
-        this.perms.group = parseInt(perm.substr(perm.length - 2, 1));
-        this.perms.user = parseInt(perm.substr(perm.length - 3, 1));
-    }
-
-    public toString(): string {
-        return `${this.owner}:${this.group}:${this.permString}:${this.accessTime}:${this.modifyTime}:${this.changeTime}:${this.createTime}`;
-    }
-
-    private getUserLevel(user: iUserIdent): "user" | "group" | "other" {
-        if (this.owner == user.name || user.name == "root") return "user";
-        if (user.groups.includes(this.group)) return "group";
-        return "other";
-    }
-
-    public canRead(user: iUserIdent): boolean {
-        return this.userHasPerm(user, FSPerm.read);
-    }
-
-    public canWrite(user: iUserIdent): boolean {
-        return this.userHasPerm(user, FSPerm.write);
-    }
-
-    public canExecute(user: iUserIdent): boolean {
-        return this.userHasPerm(user, FSPerm.execute);
-    }
-
-    private userHasPerm(user: iUserIdent, perm: FSPerm): boolean {
-        switch (this.getUserLevel(user)) {
-            case "user":
-                if (this.permTest(this.perms.user, perm)) return true;
-            case "group":
-                if (this.permTest(this.perms.group, perm)) return true;
-            case "other":
-                if (this.permTest(this.perms.other, perm)) return true;
-            default:
-                return false;
-        }
-    }
-
-    private permTest(perm: number, test: FSPerm): boolean {
-        //@ts-ignore
-        const testPerm: number = parseInt(test);
-        return (perm & testPerm) > 0;
-    }
-}
-
-export class PathResolver {
-    public static parent(name: string) {
-        const parts = name.split("/");
-        parts.pop();
-        return parts.join("/");
-    }
-
-    public static resolve(name: string, cwd: string, username: string) {
-        const parts = name.split("/");
-        if ((parts[0] || "") == "~") {
-            parts.shift();
-            parts.unshift(username);
-            if (username != "root") {
-                parts.unshift("home");
-            }
-            parts.unshift("");
-        }
-        if (parts[0] != "") {
-            cwd.split("/").reverse().forEach(p => parts.unshift(p));
-        }
-        const out: string[] = [];
-        parts.forEach(p => {
-            if (p == ".") return;
-            else if (p == "..") out.pop();
-            else out.push(p);
-        });
-        return "/" + out.filter(i => i.length > 0).join("/");
-    }
-
-    public static abreviate(path: string, cwd: string, username: string) {
-        path = PathResolver.resolve(path, cwd, username);
-        if (username == "root") {
-            if (path.startsWith("/root/") || path == "/root") {
-                path = "~" + path.substr("/root".length);
-            }
-        } else if (path.startsWith(`/home/${username}/`) || path == `/home/${username}`) {
-            path = "~" + path.substr(`/root/${username}`.length);
-        }
-        return path;
-    }
-}
-
-class FPath {
-    private _path: string;
-    private _parent: FPath | null = null;
-    private cwd: string;
-    private username: string;
-    constructor(path: string, cwd: string, username: string) {
-        this.cwd = cwd;
-        this.username = username;
-        this._path = PathResolver.resolve(path, cwd, username);
-    }
-
-    public get parent(): FPath {
-        if (this._parent === null) {
-            this._parent = new FPath(PathResolver.parent(this.path), this.cwd, this.username);
-        }
-        return this._parent;
-    }
-
-    public get path(): string {
-        return this._path;
-    }
-
-    public get isRoot(): boolean {
-        return this.path === "/";
-    }
-
-    public toString(): string {
-        return this.path;
-    }
-
-    public get parentList(): FPath[] {
-        if (this.isRoot) return [];
-        let parent = this.parent;
-        const parents = [parent];
-        while (!parent.isRoot) {
-            parent = parent.parent;
-            parents.unshift(parent);
-        }
-        return parents;
-    }
-
+    _removeItem.apply(window.localStorage, [key]);
+    getKeys()
+        .filter(k => k.startsWith(key + "/"))
+        .forEach(k => removeItem(k));
 }
 
 export class FileSystemHandle implements iFileSystem {
@@ -303,13 +135,13 @@ export class FileSystemHandle implements iFileSystem {
     public mkdir(path: string | FPath) {
         path = this.ensureFPath(path);
         this.createCheck(path);
-        this.fs.mkdir(path, this.user.name);
+        this.fs.mkdir(path, new FSAccess("755", this.user.name, this.user.name));
     }
 
     public touch(path: string | FPath) {
         path = this.ensureFPath(path);
         this.createCheck(path);
-        this.fs.touch(path, this.user.name);
+        this.fs.touch(path, new FSAccess("644", this.user.name, this.user.name));
     }
 
     public read(path: string | FPath): string {
@@ -322,6 +154,22 @@ export class FileSystemHandle implements iFileSystem {
         path = this.ensureFPath(path);
         this.writeCheck(path);
         this.fs.delete(path);
+    }
+
+    public cp(from: string | FPath, to: string | FPath, force?: boolean): void {
+        force = force || false;
+        from = this.ensureFPath(from);
+        to = this.ensureFPath(to);
+        if (!force || !this.exists(to)) {
+            this.createCheck(to);
+        } else this.writeCheck(to);
+        this.readCheck(from);
+        this.fs.cp(from, to, this.user.name);
+    }
+
+    public mv(from: string | FPath, to: string | FPath, force?: boolean): void {
+        this.cp(from, to, force);
+        this.delete(from);
     }
 
     public resolve(path: string): string {
@@ -427,6 +275,7 @@ export class FileSystemHandle implements iFileSystem {
     }
 
     private isType(path: string | FPath, type: FSType): boolean {
+        if (!this.exists(path)) return false;
         path = this.ensureFPath(path);
         this.readCheck(path);
         return this.fs.getType(path) == type;
@@ -446,6 +295,7 @@ export class FileSystemHandle implements iFileSystem {
         }
         this._cwd = path.path;
         this.user.setEnv("cwd", path.path);
+        this.user.setEnv("cwd_short", this.abreviate(path));
     }
 
     public chmod(path: string | FPath, perm: string) {
@@ -483,16 +333,16 @@ export class FileSystemHandle implements iFileSystem {
     }
 }
 
-class FileSystem {
-    public mkdir(path: FPath, owner: string, group: string | null = null): void {
+export class FileSystem {
+    public mkdir(path: FPath, perm: FSAccess): void {
         this.setType(path, FSType.dir);
-        this.setPerm(path, new FSAccess("755", owner, group || owner));
+        this.setPerm(path, perm);
     }
 
-    public touch(path: FPath, owner: string, group: string | null = null): void {
+    public touch(path: FPath, perm: FSAccess, data?: string): void {
         this.setType(path, FSType.file);
-        this.setPerm(path, new FSAccess("644", owner, group || owner));
-        this.write(path, "");
+        this.setPerm(path, perm);
+        this.write(path, data || "");
     }
 
     private setType(path: FPath, type: FSType): void {
@@ -537,26 +387,39 @@ class FileSystem {
         const t = this.getType(path);
         if (t !== null) {
             setItem(`!FS:T:${path.path}`, t);
-            localStorage.removeItem(`FS:T:${path.path}`);
+            removeItem(`FS:T:${path.path}`);
             if (t == FSType.file) {
                 setItem(`!FS:D:${path.path}`, this.read(path) || "");
-                localStorage.removeItem(`FS:D:${path.path}`);
+                removeItem(`FS:D:${path.path}`);
             }
             setItem(`!FS:P:${path.path}`, this.getPerm(path).toString());
-            localStorage.removeItem(`FS:P:${path.path}`);
+            removeItem(`FS:P:${path.path}`);
         }
     }
 
     public append(path: FPath, data: string): void {
-        this.write(path, this.read(path) + data);
+        this.write(path, (this.read(path) || "") + data);
     }
 
     public prepend(path: FPath, data: string): void {
-        this.write(path, data + this.read(path));
+        this.write(path, data + (this.read(path) || ""));
     }
 
     public exists(path: FPath): boolean {
         return this.getType(path) != null;
+    }
+
+    public cp(from: FPath, to: FPath, user: string) {
+        const type = this.getType(from);
+        const perm = this.getPerm(from);
+        perm.setOwner(user);
+        perm.setGroup(user);
+        if (type == FSType.file || type == FSType.link) {
+            const data = this.read(from);
+            this.touch(to, perm, data || "");
+        } else if (type == FSType.dir) {
+            this.mkdir(to, perm);
+        }
     }
 
     public getPerm(path: FPath): FSAccess {
@@ -569,27 +432,30 @@ class FileSystem {
     }
 
     public list(path: FPath, deleted: boolean = false): string[] {
-        return Object.keys(localStorage)
+        return getKeys()
             .filter(key => key.startsWith("FS:T:") || (deleted ? key.startsWith("!FS:T:") : false))
             .map(key => key.substr(5))
             .filter(key => key.startsWith(path.path + (path.path == "/" ? "" : "/")) && key.length > path.path.length)
             .filter(key => !key.substr(path.path.length + (path.path == "/" ? 0 : 1)).includes("/"));
     }
+
+    public static async boot() {
+
+        const permRoot = new FSAccess("755", "root", "root");
+
+        (new FileSystem()).mkdir(new FPath("/", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FPath("/bin", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FPath("/home", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FPath("/home/guest", "/", "root"), new FSAccess("755", "guest", "guest"));
+        (new FileSystem()).mkdir(new FPath("/home/wolfgang", "/", "root"), new FSAccess("755", "wolfgang", "wolfgang"));
+        (new FileSystem()).mkdir(new FPath("/root", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FPath("/etc", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FPath("/etc/shell", "/", "root"), permRoot);
+
+        loadCache();
+        window.onbeforeunload = () => {
+            forceSaveCache();
+        };
+    }
 }
 
-enum FSType {
-    file = "file",
-    dir = "dir",
-    in = "in",
-    out = "out",
-    link = "link"
-}
-
-(new FileSystem()).mkdir(new FPath("/", "/", "root"), "root", "root");
-(new FileSystem()).mkdir(new FPath("/bin", "/", "root"), "root", "root");
-(new FileSystem()).mkdir(new FPath("/home", "/", "root"), "root", "root");
-(new FileSystem()).mkdir(new FPath("/home/guest", "/", "root"), "guest", "guest");
-(new FileSystem()).mkdir(new FPath("/home/wolfgang", "/", "root"), "wolfgang", "wolfgang");
-(new FileSystem()).mkdir(new FPath("/root", "/", "root"), "root", "root");
-(new FileSystem()).mkdir(new FPath("/etc", "/", "root"), "root", "root");
-(new FileSystem()).mkdir(new FPath("/etc/shell", "/", "root"), "root", "root");

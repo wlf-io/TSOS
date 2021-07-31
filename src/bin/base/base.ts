@@ -14,6 +14,8 @@ export default abstract class BaseApp implements iProcessInstance {
 
     protected rawArgs: string[] = [];
 
+    private inputQueue: [iOutput, string][] = [];
+
     constructor(proc: iProcess) {
         this.proc = proc;
         this.system = proc.system;
@@ -51,14 +53,18 @@ export default abstract class BaseApp implements iProcessInstance {
     }
 
     public input(input: iOutput, ident: string): void {
-        if (this.state != AppState.running) return;
-        if (input == "\u0018") this.end("");
+        if (this.state != AppState.running) this.queueInput(input, ident);
+        else if (input == "\u0018") this.end("");
         else this.passInput(input, ident);
+    }
+
+    private queueInput(input: iOutput, ident: string) {
+        this.inputQueue.push([input, ident]);
     }
 
     protected passInput(_input: iOutput, _ident: string): void {
 
-    };
+    }
 
     public run(args: string[]): Promise<iOutput> {
         if (this.state != AppState.new) return Promise.reject(this.state);
@@ -66,8 +72,17 @@ export default abstract class BaseApp implements iProcessInstance {
         this.state = AppState.running;
         this.rawArgs = [...args];
         args = this.processArgFlags(args);
-        window.setTimeout(() => this.start(args), 1);
+        window.setTimeout(() => this.runProcess(args), 0);
         return this.endPromise.promise;
+    }
+
+    protected runProcess(args: string[]) {
+        this.start(args);
+        while (this.inputQueue.length) {
+            if (this.state != AppState.running) return;
+            const input = this.inputQueue.shift();
+            if (input) this.input(input[0], input[1]);
+        }
     }
 
     protected abstract start(args: string[]): void;

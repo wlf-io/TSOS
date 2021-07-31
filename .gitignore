@@ -2,5 +2,6 @@
 node_modules
 /dist/*
 !dist/index.html
+!dist/tsos.css
 !dist/root
 dist/root/bin
