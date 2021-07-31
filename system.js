@@ -413,7 +413,15 @@ class DisplayInstance {
     writeInputToData(input) {
         const linesAffected = [];
         const lex = DisplayLexer_1.default.createFromString(input, [
-            { s: /[\u001B]/, e: /[a-zA-Z]/ },
+            {
+                s: /[\u001B]/, e: (ch, _n, i) => {
+                    if (i == 0)
+                        return false;
+                    if (i == 1)
+                        return ch != "[";
+                    return /[\u0040-\u007E]/.test(ch);
+                }
+            },
             { s: /[\u0000-\u001A\u007F]/, e: null },
         ]);
         while (!lex.eof()) {
@@ -468,12 +476,29 @@ class DisplayInstance {
 /***/ }),
 
 /***/ 14:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
 
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.FileSystemHandle = exports.PathResolver = exports.FSAccess = exports.FSPerm = void 0;
+exports.FileSystem = exports.FileSystemHandle = void 0;
+const FSModels_1 = __webpack_require__(958);
+const PathResolver_1 = __importDefault(__webpack_require__(268));
+const System_1 = __webpack_require__(978);
 const _setItem = Storage.prototype.setItem;
+const _getItem = Storage.prototype.getItem;
+const _removeItem = Storage.prototype.removeItem;
+Storage.prototype.setItem = (_key, _value) => {
+    throw "Blocked";
+};
+Storage.prototype.getItem = (_key) => {
+    throw "Blocked";
+};
+Storage.prototype.removeItem = (_key) => {
+    throw "Blocked";
+};
 const _cache = {};
 let _cachePending = [];
 const setItem = (key, value) => {
@@ -482,41 +507,914 @@ const setItem = (key, value) => {
     _cachePending = [...(new Set(_cachePending))];
     queueWrite();
 };
+const loadCache = () => {
+    Object.keys(window.localStorage).forEach(k => {
+        _cache[k] = _getItem.apply(window.localStorage, [k]) || "";
+    });
+};
+const getKeys = () => {
+    return Object.keys(_cache);
+};
 let writeTick = null;
+let writeStart = 0;
 const queueWrite = () => {
     if (writeTick !== null)
         return;
+    if (writeStart == 0) {
+        System_1.System.debug("Disk Write Pending", _cachePending.length);
+        System_1.System.debug("Disk Write Done", null);
+        System_1.System.debug("Disk Write Time", null);
+        writeStart = performance.now();
+    }
     writeTick = window.setTimeout(() => {
         if (_cachePending.length > 0) {
             const key = _cachePending.shift();
             if (key) {
-                _setItem.apply(window.localStorage, [key, _cache[key]]);
+                if (_cache.hasOwnProperty(key)) {
+                    _setItem.apply(window.localStorage, [key, _cache[key]]);
+                }
             }
         }
         writeTick = null;
+        System_1.System.debug("Disk Write Pending", _cachePending.length);
         if (_cachePending.length > 0) {
             queueWrite();
         }
-    }, 100);
+        else {
+            writeStart = 0;
+            System_1.System.debug("Disk Write Done", (new Date()).toTimeString());
+            System_1.System.debug("Disk Write Time", performance.now() - writeStart);
+        }
+    }, 50);
 };
-const _getItem = Storage.prototype.getItem;
-const getItem = (key) => {
-    if (!_cache.hasOwnProperty(key)) {
-        const get = _getItem.apply(window.localStorage, [key]);
-        if (get != null)
-            _cache[key] = get;
+const forceSaveCache = () => {
+    if (writeTick != null) {
+        window.clearTimeout(writeTick);
     }
+    _cachePending.forEach(key => {
+        if (_cache.hasOwnProperty(key)) {
+            _setItem.apply(window.localStorage, [key, _cache[key]]);
+        }
+    });
+    console.log(`Wrote ${_cachePending.length} keys`);
+};
+const getItem = (key) => {
     return _cache[key] || null;
 };
-Storage.prototype.setItem = (_key, _value) => {
-    throw "Blocked";
+const removeItem = (key) => {
+    if (_cache.hasOwnProperty(key)) {
+        delete _cache[key];
+    }
+    _removeItem.apply(window.localStorage, [key]);
+    getKeys()
+        .filter(k => k.startsWith(key + "/"))
+        .forEach(k => removeItem(k));
 };
+class FileSystemHandle {
+    constructor(user) {
+        this._cwd = "/";
+        this.user = user;
+        this.fs = new FileSystem();
+    }
+    clone(user) {
+        user = user || this.user.clone();
+        const fs = new FileSystemHandle(user);
+        fs.setCwd(this.cwd);
+        return fs;
+    }
+    write(path, data) {
+        path = this.ensureFPath(path);
+        this.writeCheck(path);
+        this.fs.write(path, data);
+    }
+    append(path, data) {
+        path = this.ensureFPath(path);
+        this.writeCheck(path);
+        this.fs.append(path, data);
+    }
+    prepend(path, data) {
+        path = this.ensureFPath(path);
+        this.writeCheck(path);
+        this.fs.prepend(path, data);
+    }
+    mkdir(path) {
+        path = this.ensureFPath(path);
+        this.createCheck(path);
+        this.fs.mkdir(path, new FSModels_1.FSAccess("755", this.user.name, this.user.name));
+    }
+    touch(path) {
+        path = this.ensureFPath(path);
+        this.createCheck(path);
+        this.fs.touch(path, new FSModels_1.FSAccess("644", this.user.name, this.user.name));
+    }
+    read(path) {
+        path = this.ensureFPath(path);
+        this.readCheck(path);
+        return this.fs.read(path) || "";
+    }
+    delete(path) {
+        path = this.ensureFPath(path);
+        this.writeCheck(path);
+        this.fs.delete(path);
+    }
+    cp(from, to, force) {
+        force = force || false;
+        from = this.ensureFPath(from);
+        to = this.ensureFPath(to);
+        if (!force || !this.exists(to)) {
+            this.createCheck(to);
+        }
+        else
+            this.writeCheck(to);
+        this.readCheck(from);
+        this.fs.cp(from, to, this.user.name);
+    }
+    mv(from, to, force) {
+        this.cp(from, to, force);
+        this.delete(from);
+    }
+    resolve(path) {
+        const p = PathResolver_1.default.resolve(path, this.cwd, this.user.name);
+        return p;
+    }
+    abreviate(path) {
+        path = this.ensureFPath(path);
+        return PathResolver_1.default.abreviate(path.path, this.cwd, this.user.name);
+    }
+    createCheck(path) {
+        if (!this.canRead(path.parent)) {
+            throw `'${path.parent}' does not exist [CC]`;
+        }
+        if (!this.isDir(path.parent)) {
+            throw `'${path.parent}' is not a directory [CC]`;
+        }
+        if (!this.canWrite(path.parent)) {
+            throw `'${path.parent}' access denied [CC]`;
+        }
+        if (this.fs.exists(path)) {
+            throw `${path} already exists [CC]`;
+        }
+    }
+    writeCheck(path) {
+        if (!this.fs.exists(path)) {
+            this.touch(path);
+        }
+        if (!this.canWrite(path)) {
+            throw `${path} access denied [WC]`;
+        }
+    }
+    readCheck(path) {
+        if (!this.canRead(path)) {
+            throw `${path} access denied [RC]`;
+        }
+    }
+    executeCheck(path) {
+        if (!this.canExecute(path)) {
+            throw `${path} is not executable [EC]`;
+        }
+    }
+    canRead(path) {
+        path = this.ensureFPath(path);
+        if (path.isRoot)
+            return true;
+        if (!this.exists(path)) {
+            console.log("READ NOT EXIST");
+            return false;
+        }
+        return this.fs.getPerm(path).canRead(this.user);
+    }
+    canWrite(path) {
+        path = this.ensureFPath(path);
+        if (!this.exists(path)) {
+            return false;
+        }
+        return this.fs.getPerm(path).canWrite(this.user);
+    }
+    canExecute(path) {
+        path = this.ensureFPath(path);
+        if (path.isRoot)
+            return true;
+        if (!this.exists(path)) {
+            return false;
+        }
+        return this.fs.getPerm(path).canExecute(this.user);
+    }
+    exists(path) {
+        path = this.ensureFPath(path);
+        if (!this.fs.isType(path.parent, FSModels_1.FSType.dir)) {
+            console.log("EXISTS PARENT NOT DIR");
+            return false;
+        }
+        const perm = this.fs.getPerm(path.parent);
+        if (!perm.canRead(this.user)) {
+            console.log(`EXISTS PARENT NOT PERM ${perm}`);
+            return false;
+        }
+        return this.fs.exists(path);
+    }
+    isDir(path) {
+        path = this.ensureFPath(path);
+        return this.isType(path, FSModels_1.FSType.dir);
+    }
+    ensureFPath(path) {
+        if (typeof path === "string")
+            path = new FSModels_1.FPath(path, this.cwd, this.user.name);
+        return path;
+    }
+    isFile(path) {
+        path = this.ensureFPath(path);
+        return this.isType(path, FSModels_1.FSType.file);
+    }
+    isType(path, type) {
+        if (!this.exists(path))
+            return false;
+        path = this.ensureFPath(path);
+        this.readCheck(path);
+        return this.fs.getType(path) == type;
+    }
+    get cwd() {
+        return this._cwd;
+    }
+    setCwd(path) {
+        path = this.ensureFPath(path);
+        if (!this.canExecute(path)) {
+            throw `${path} access denied`;
+        }
+        if (!this.isDir(path)) {
+            throw `${path} is not a directory`;
+        }
+        this._cwd = path.path;
+        this.user.setEnv("cwd", path.path);
+        this.user.setEnv("cwd_short", this.abreviate(path));
+    }
+    chmod(path, perm) {
+        path = this.ensureFPath(path);
+        this.writeCheck(path);
+        const access = this.fs.getPerm(path);
+        access.setPerm(perm);
+        this.fs.setPerm(path, access);
+    }
+    chown(path, owner, group) {
+        path = this.ensureFPath(path);
+        this.writeCheck(path);
+        const access = this.fs.getPerm(path);
+        access.setOwner(owner);
+        access.setGroup(group || access.group);
+        this.fs.setPerm(path, access);
+    }
+    list(path, trim = false) {
+        const fpath = this.ensureFPath(path);
+        this.executeCheck(fpath);
+        let items = this.fs.list(fpath);
+        items = items.filter(i => this.canRead(i));
+        if (trim) {
+            items = items.map(key => trim ? key.substr(fpath.path.length + (fpath.path == "/" ? 0 : 1)) : key);
+        }
+        return items;
+    }
+    getPerm(path) {
+        path = this.ensureFPath(path);
+        this.readCheck(path);
+        return this.fs.getPerm(path);
+    }
+}
+exports.FileSystemHandle = FileSystemHandle;
+class FileSystem {
+    mkdir(path, perm) {
+        this.setType(path, FSModels_1.FSType.dir);
+        this.setPerm(path, perm);
+    }
+    touch(path, perm, data) {
+        this.setType(path, FSModels_1.FSType.file);
+        this.setPerm(path, perm);
+        this.write(path, data || "");
+    }
+    setType(path, type) {
+        setItem("FS:T:" + path.path, type);
+    }
+    setPerm(path, perm) {
+        setItem("FS:P:" + path.path, perm.toString());
+    }
+    isType(path, type) {
+        return this.getType(path) == type;
+    }
+    getType(path) {
+        const t = getItem("FS:T:" + path.path) || "";
+        return FSModels_1.FSType[t] || null;
+    }
+    read(path) {
+        const t = this.getType(path);
+        let v = getItem("FS:D:" + path.path);
+        if (t == FSModels_1.FSType.link) {
+            v = getItem("FS:D:" + v);
+        }
+        return v;
+    }
+    write(path, data) {
+        const t = this.getType(path);
+        let p = path.path;
+        if (t == FSModels_1.FSType.link) {
+            p = getItem("FS:D:" + p) || p;
+        }
+        setItem("FS:D:" + p, data);
+        const perm = this.getPerm(path);
+        perm.modifyTime = (Date.now() / 1000 | 0);
+        this.setPerm(path, perm);
+    }
+    delete(path) {
+        const t = this.getType(path);
+        if (t !== null) {
+            setItem(`!FS:T:${path.path}`, t);
+            removeItem(`FS:T:${path.path}`);
+            if (t == FSModels_1.FSType.file) {
+                setItem(`!FS:D:${path.path}`, this.read(path) || "");
+                removeItem(`FS:D:${path.path}`);
+            }
+            setItem(`!FS:P:${path.path}`, this.getPerm(path).toString());
+            removeItem(`FS:P:${path.path}`);
+        }
+    }
+    append(path, data) {
+        this.write(path, (this.read(path) || "") + data);
+    }
+    prepend(path, data) {
+        this.write(path, data + (this.read(path) || ""));
+    }
+    exists(path) {
+        return this.getType(path) != null;
+    }
+    cp(from, to, user) {
+        const type = this.getType(from);
+        const perm = this.getPerm(from);
+        perm.setOwner(user);
+        perm.setGroup(user);
+        if (type == FSModels_1.FSType.file || type == FSModels_1.FSType.link) {
+            const data = this.read(from);
+            this.touch(to, perm, data || "");
+        }
+        else if (type == FSModels_1.FSType.dir) {
+            this.mkdir(to, perm);
+        }
+    }
+    getPerm(path) {
+        const str = getItem("FS:P:" + path.path) || "";
+        const perm = FSModels_1.FSAccess.fromAccessString(str);
+        if (perm.accessUndefined) {
+            this.setPerm(path, perm);
+        }
+        return perm;
+    }
+    list(path, deleted = false) {
+        return getKeys()
+            .filter(key => key.startsWith("FS:T:") || (deleted ? key.startsWith("!FS:T:") : false))
+            .map(key => key.substr(5))
+            .filter(key => key.startsWith(path.path + (path.path == "/" ? "" : "/")) && key.length > path.path.length)
+            .filter(key => !key.substr(path.path.length + (path.path == "/" ? 0 : 1)).includes("/"));
+    }
+    static async boot() {
+        const permRoot = new FSModels_1.FSAccess("755", "root", "root");
+        (new FileSystem()).mkdir(new FSModels_1.FPath("/", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FSModels_1.FPath("/bin", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FSModels_1.FPath("/home", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FSModels_1.FPath("/home/guest", "/", "root"), new FSModels_1.FSAccess("755", "guest", "guest"));
+        (new FileSystem()).mkdir(new FSModels_1.FPath("/home/wolfgang", "/", "root"), new FSModels_1.FSAccess("755", "wolfgang", "wolfgang"));
+        (new FileSystem()).mkdir(new FSModels_1.FPath("/root", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FSModels_1.FPath("/etc", "/", "root"), permRoot);
+        (new FileSystem()).mkdir(new FSModels_1.FPath("/etc/shell", "/", "root"), permRoot);
+        loadCache();
+        window.onbeforeunload = () => {
+            forceSaveCache();
+        };
+    }
+}
+exports.FileSystem = FileSystem;
+
+
+/***/ }),
+
+/***/ 221:
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+class Process {
+    constructor(pid, system, binary, args, parent = null) {
+        var _a;
+        this._parent = null;
+        this._pid = pid;
+        this._system = system;
+        this._binary = binary;
+        this._parent = parent;
+        this.args = args;
+        try {
+            this._instance = new this._binary(this);
+        }
+        catch (e) {
+            (_a = this.parent) === null || _a === void 0 ? void 0 : _a.input("\u001B[31mError\u001B[0m: Failed to start process", "error");
+            this._instance = new DummyProc();
+        }
+    }
+    kill() {
+        var _a;
+        (_a = this.instance) === null || _a === void 0 ? void 0 : _a.kill();
+        this._instance = null;
+    }
+    end(input) {
+        var _a;
+        (_a = this._instance) === null || _a === void 0 ? void 0 : _a.end(input);
+        this._instance = null;
+    }
+    hookOut(hook, ident = null) {
+        var _a;
+        (_a = this.instance) === null || _a === void 0 ? void 0 : _a.hookOut(hook, ident);
+    }
+    input(input, ident = null) {
+        var _a;
+        (_a = this.instance) === null || _a === void 0 ? void 0 : _a.input(input, ident);
+    }
+    get system() {
+        return this._system;
+    }
+    get user() {
+        return this.system.user;
+    }
+    get pid() {
+        return this._pid;
+    }
+    get instance() {
+        return this._instance;
+    }
+    get parent() {
+        return this._parent;
+    }
+    get fileSystem() {
+        return this.system.fileSystem;
+    }
+    run() {
+        var _a;
+        const out = (_a = this.instance) === null || _a === void 0 ? void 0 : _a.run(this.args);
+        return out || Promise.reject("INSTANCE FAILE");
+    }
+    createProcess(location, args) {
+        let bin = null;
+        let loc = this.fileSystem.resolve(location);
+        if (this.fileSystem.exists(loc)) {
+            if (location.startsWith("/") || location.startsWith("./") || location.startsWith("~")) {
+                bin = this.fileSystem.read(loc);
+            }
+        }
+        if (bin === null) {
+            loc = this.getBinPath(location);
+            if (loc != null) {
+                bin = this.fileSystem.read(loc);
+            }
+        }
+        if (bin == null || loc == null)
+            throw `${location} is not a recognized program\n`;
+        if (!this.fileSystem.canExecute(loc))
+            throw `${loc} is not executable\n`;
+        const first = bin.split("\n")[0];
+        if (first.startsWith("#!")) {
+            const handler = first.substr(2).trim().split(" ");
+            const app = handler.shift() || "";
+            if ((app === null || app === void 0 ? void 0 : app.length) > 0) {
+                return this.createProcess(app, [...handler, "-s", loc, ...args]);
+            }
+        }
+        const proc = this.system.createProcess(bin, args, this);
+        return proc;
+    }
+    getBinPath(name) {
+        const paths = this.getAvailablePrograms();
+        const path = paths.find(v => v[1].includes(name)) || null;
+        if (path == null)
+            return path;
+        return path[0] + "/" + name;
+    }
+    getAvailablePrograms() {
+        const path = (this.user.getEnv("path") || "/bin").split(";");
+        return path.map(p => [p, this.fileSystem.list(p, true)]);
+    }
+    log(...args) {
+        console.log(`Proc[${this.pid}]: `, ...args);
+    }
+}
+exports.default = Process;
+class DummyProc {
+    end(_input) {
+        throw new Error("Method not implemented.");
+    }
+    run(_args) {
+        return Promise.resolve("");
+    }
+    kill() {
+    }
+    hookOut(_hook, _ident) {
+    }
+    input(_input, _ident) {
+    }
+}
+
+
+/***/ }),
+
+/***/ 978:
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.System = exports.SystemHandle = void 0;
+const UserIdent_1 = __webpack_require__(895);
+const FileSystem_1 = __webpack_require__(14);
+const Display_1 = __importDefault(__webpack_require__(925));
+const Process_1 = __importDefault(__webpack_require__(221));
+class SystemHandle {
+    constructor(user, fs = null) {
+        this._user = user;
+        this.fs = fs || new FileSystem_1.FileSystemHandle(this.user);
+    }
+    get user() {
+        return this._user;
+    }
+    get fileSystem() {
+        return this.fs;
+    }
+    clone() {
+        const user = this.user.clone();
+        const fs = this.fs.clone(user);
+        return new SystemHandle(user, fs);
+    }
+    debug(key, value) {
+        System.debug(key, value);
+    }
+    get isDebug() {
+        return System.isDebug;
+    }
+    createSystemHandle(name, pass = null) {
+        if (name == this.user.name)
+            return new SystemHandle(this.user);
+        const root = new UserIdent_1.UserIdent("root", ["root"]);
+        const fs = new FileSystem_1.FileSystemHandle(root);
+        const shadow = fs.read("/etc/shadow").split("\n");
+        const line = (shadow.find(item => item.startsWith(name)) || "").split(":");
+        if (line.length > 1) {
+            if (line[1] == pass) {
+                const user = new UserIdent_1.UserIdent(name, [name]);
+                return new SystemHandle(user);
+            }
+        }
+        throw "User Not found";
+    }
+    createProcess(bin, args, creator) {
+        return System.createProcess(bin, this, args, creator);
+    }
+}
+exports.SystemHandle = SystemHandle;
+const EVAL = window.eval;
+window.eval = (...args) => console.log("Eval Attempted", args);
+class System {
+    static debug(key, value) {
+        if (value == null) {
+            if (System._debug.hasOwnProperty(key)) {
+                delete System._debug[key];
+            }
+        }
+        else {
+            System._debug[key] = value;
+        }
+        const pre = document.getElementById("debug");
+        if (pre instanceof HTMLElement) {
+            pre.textContent = JSON.stringify(System._debug, null, 2);
+        }
+    }
+    static get isDebug() {
+        return System.debugging;
+    }
+    static toggleDebug() {
+        System.debugging = !System.debugging;
+        const pre = document.getElementById("debug");
+        if (pre instanceof HTMLElement) {
+            pre.style.display = System.isDebug ? "block" : "none";
+        }
+    }
+    static createProcess(bin, system, args, creator) {
+        let next = null;
+        try {
+            next = EVAL(bin).default || null;
+        }
+        catch (e) {
+            throw e.toString() + "\n";
+        }
+        System.processCount++;
+        return new Process_1.default(System.processCount, system.clone(), next, args, creator);
+    }
+    static setup(system) {
+        if (System.isDev)
+            System.toggleDebug();
+        return System.loadRoot(system, () => true, true)
+            .then(() => {
+            if (System.isDev) {
+                window.setInterval(() => System.loadRoot(system, (s) => s.startsWith("/bin/")), 10000);
+            }
+        });
+    }
+    static async loadRoot(system, filter, output = false) {
+        const response = await fetch("root.json");
+        const txt = await response.text();
+        const hashB = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(txt));
+        const hashA = Array.from(new Uint8Array(hashB));
+        const hash = hashA.map(a => a.toString(16).padStart(2, "0")).join("");
+        if (hash == System.rootHash)
+            return;
+        console.log("root changed", hash);
+        System.rootHash = hash;
+        const json = JSON.parse(txt);
+        if (json == null)
+            throw "root json is null";
+        if (output)
+            Display_1.default.instance.input("Installing...\n", "setup");
+        for (const e of Object.entries(json)) {
+            const path = e[0];
+            if (!filter(path))
+                return;
+            const file = e[1] || null;
+            if (typeof file == "object" && file != null && file.hasOwnProperty("content")) {
+                if (output)
+                    Display_1.default.instance.input(`\t${path}...`, "setup");
+                const len = Math.floor(`${path}...`.length / 8);
+                if (!system.fileSystem.exists(path) && !System.isDev) {
+                    await (new Promise(res => window.setTimeout(() => res(0), 200)));
+                }
+                system.fileSystem.write(path, file["content"] || "");
+                const perms = (file["perm"] || "root:root:0755").split(":");
+                system.fileSystem.chmod(path, perms[2] || "755");
+                system.fileSystem.chown(path, perms[0] || "root", perms[1] || "root");
+                if (output)
+                    Display_1.default.instance.input(`${(new Array(5 - len)).join("\t")}\u001B[32mDone\u001B[0m\n`, "setup");
+            }
+            else {
+                console.log(e);
+            }
+        }
+        console.groupEnd();
+        if (output) {
+            if (!System.isDev) {
+                Display_1.default.instance.input("Complete!!!", "setup");
+                await (new Promise(res => window.setTimeout(() => res(0), 1000)));
+            }
+            Display_1.default.instance.input("\u001B[J", "setup");
+        }
+    }
+    static get isDev() {
+        return location.hostname == "127.0.0.1";
+    }
+    static async boot() {
+        await FileSystem_1.FileSystem.boot();
+        const root = new UserIdent_1.UserIdent("root", ["root"]);
+        const rootSysHandle = new SystemHandle(root);
+        document.onkeypress = ev => {
+            System.keyInput(ev.key);
+            return false;
+        };
+        document.onkeydown = ev => {
+            switch (ev.key) {
+                case "Backspace":
+                case "Tab":
+                case "ArrowUp":
+                case "ArrowDown":
+                case "ArrowLeft":
+                case "ArrowRight":
+                case "Home":
+                case "End":
+                case "Delete":
+                    System.keyInput(ev.key);
+                    return false;
+                case "c":
+                    if (ev.ctrlKey && !ev.altKey && !ev.shiftKey) {
+                        System.keyInput("\u0018");
+                        return false;
+                    }
+                case "a":
+                    if (ev.ctrlKey)
+                        return false;
+                    break;
+                case "d":
+                    if (ev.ctrlKey && ev.altKey) {
+                        System.toggleDebug();
+                        return false;
+                    }
+                case "Alt":
+                case "Shift":
+                case "Control":
+                    break;
+                default:
+                    break;
+            }
+        };
+        System.setup(rootSysHandle)
+            .then(() => {
+            const shell = rootSysHandle.fileSystem.read("/bin/shell");
+            const guest = new UserIdent_1.UserIdent("guest", ["guest"]);
+            const guestSysHandle = new SystemHandle(guest);
+            guestSysHandle.fileSystem.setCwd("~");
+            const proc = System.createProcess(shell, guestSysHandle, ["--motd"], null);
+            Display_1.default.hookOut(proc);
+            System.hookInput(proc);
+            return proc.run();
+        })
+            .then(() => {
+            console.log("out");
+        }).catch(_e => {
+            const disp = document.getElementById("main-display");
+            while (disp === null || disp === void 0 ? void 0 : disp.firstChild) {
+                disp.removeChild(disp.firstChild);
+            }
+            console.log(_e);
+        });
+    }
+    static hookInput(input) {
+        System.inputHooks.push(input);
+    }
+    static keyInput(ev) {
+        System.inputHooks.forEach(hook => hook.input(ev, "user"));
+    }
+}
+exports.System = System;
+System.processCount = 0;
+System.inputHooks = [];
+System.rootHash = "";
+System.debugging = false;
+System._debug = {};
+
+
+/***/ }),
+
+/***/ 895:
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.UserIdent = void 0;
+class UserIdent {
+    constructor(name, groups, env) {
+        this._env = env || new UserEnv();
+        this._name = name;
+        this._groups = groups;
+    }
+    get name() {
+        return this._name;
+    }
+    get groups() {
+        return [...this._groups];
+    }
+    get env() {
+        return this._env.vars;
+    }
+    getEnv(key) {
+        key = key.toUpperCase().trim();
+        if (key == "USER")
+            return this.name;
+        return this.env[key] || null;
+    }
+    setEnv(key, value) {
+        key = key.toUpperCase().trim();
+        this.env[key] = value;
+    }
+    listEnv() {
+        return Object.entries(this.env);
+    }
+    remEnv(key) {
+        key = key.toUpperCase().trim();
+        if (this.env.hasOwnProperty(key)) {
+            delete this.env[key];
+        }
+    }
+    clone() {
+        const user = new UserIdent(this.name, this.groups, this._env);
+        return user;
+    }
+}
+exports.UserIdent = UserIdent;
+class UserEnv {
+    constructor() {
+        this.vars = {
+            "PATH": "/bin"
+        };
+    }
+}
+
+
+/***/ }),
+
+/***/ 804:
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+const LexerStream_1 = __importDefault(__webpack_require__(93));
+class DisplayLexer {
+    constructor(input, tokes) {
+        this.tokes = [];
+        this.input = input;
+        this.tokes = tokes;
+    }
+    static createFromString(input, tokes) {
+        return new DisplayLexer(new LexerStream_1.default(input), tokes);
+    }
+    all() {
+        this.rewind();
+        let next = this.next();
+        const all = [];
+        while (next != null) {
+            all.push(next);
+            next = this.next();
+        }
+        return all;
+    }
+    eof() {
+        return this.input.eof();
+    }
+    rewind() {
+        this.input.rewind();
+    }
+    next() {
+        if (this.input.eof())
+            return null;
+        if (this.nextIsStarter()) {
+            return this.readToken();
+        }
+        else {
+            return this.input.next();
+        }
+    }
+    nextIsStarter() {
+        return this.isStarter(this.input.peek());
+    }
+    isStarter(s) {
+        return this.tokes.some(t => t.s.test(s));
+    }
+    readToken() {
+        const ch = this.input.peek();
+        const toke = this.tokes.find(t => t.s.test(ch)) || null;
+        if (toke == null) {
+            throw new Error("WAT");
+        }
+        const end = toke.e;
+        if (end == null) {
+            return this.input.next();
+        }
+        else {
+            return this.readUntil(end);
+        }
+    }
+    readUntil(func) {
+        let str = "";
+        let i = 0;
+        while (!this.input.eof()) {
+            const s = this.input.next();
+            str += s;
+            if (func(s, this.input.peek(), i))
+                break;
+            i++;
+        }
+        return str;
+    }
+}
+exports.default = DisplayLexer;
+
+
+/***/ }),
+
+/***/ 958:
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FPath = exports.FSAccess = exports.FSType = exports.FSPerm = void 0;
+const PathResolver_1 = __importDefault(__webpack_require__(268));
 var FSPerm;
 (function (FSPerm) {
     FSPerm[FSPerm["execute"] = 1] = "execute";
     FSPerm[FSPerm["write"] = 2] = "write";
     FSPerm[FSPerm["read"] = 4] = "read";
 })(FSPerm = exports.FSPerm || (exports.FSPerm = {}));
+var FSType;
+(function (FSType) {
+    FSType["file"] = "file";
+    FSType["dir"] = "dir";
+    FSType["in"] = "in";
+    FSType["out"] = "out";
+    FSType["link"] = "link";
+})(FSType = exports.FSType || (exports.FSType = {}));
 class FSAccess {
     constructor(perm, owner, group, accessTime, modifyTime, changeTime, createTime) {
         this.perms = {
@@ -621,6 +1519,50 @@ class FSAccess {
     }
 }
 exports.FSAccess = FSAccess;
+class FPath {
+    constructor(path, cwd, username) {
+        this._parent = null;
+        this.cwd = cwd;
+        this.username = username;
+        this._path = PathResolver_1.default.resolve(path, cwd, username);
+    }
+    get parent() {
+        if (this._parent === null) {
+            this._parent = new FPath(PathResolver_1.default.parent(this.path), this.cwd, this.username);
+        }
+        return this._parent;
+    }
+    get path() {
+        return this._path;
+    }
+    get isRoot() {
+        return this.path === "/";
+    }
+    toString() {
+        return this.path;
+    }
+    get parentList() {
+        if (this.isRoot)
+            return [];
+        let parent = this.parent;
+        const parents = [parent];
+        while (!parent.isRoot) {
+            parent = parent.parent;
+            parents.unshift(parent);
+        }
+        return parents;
+    }
+}
+exports.FPath = FPath;
+
+
+/***/ }),
+
+/***/ 268:
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
 class PathResolver {
     static parent(name) {
         const parts = name.split("/");
@@ -664,769 +1606,7 @@ class PathResolver {
         return path;
     }
 }
-exports.PathResolver = PathResolver;
-class FPath {
-    constructor(path, cwd, username) {
-        this._parent = null;
-        this.cwd = cwd;
-        this.username = username;
-        this._path = PathResolver.resolve(path, cwd, username);
-    }
-    get parent() {
-        if (this._parent === null) {
-            this._parent = new FPath(PathResolver.parent(this.path), this.cwd, this.username);
-        }
-        return this._parent;
-    }
-    get path() {
-        return this._path;
-    }
-    get isRoot() {
-        return this.path === "/";
-    }
-    toString() {
-        return this.path;
-    }
-    get parentList() {
-        if (this.isRoot)
-            return [];
-        let parent = this.parent;
-        const parents = [parent];
-        while (!parent.isRoot) {
-            parent = parent.parent;
-            parents.unshift(parent);
-        }
-        return parents;
-    }
-}
-class FileSystemHandle {
-    constructor(user) {
-        this._cwd = "/";
-        this.user = user;
-        this.fs = new FileSystem();
-    }
-    clone(user) {
-        user = user || this.user.clone();
-        const fs = new FileSystemHandle(user);
-        fs.setCwd(this.cwd);
-        return fs;
-    }
-    write(path, data) {
-        path = this.ensureFPath(path);
-        this.writeCheck(path);
-        this.fs.write(path, data);
-    }
-    append(path, data) {
-        path = this.ensureFPath(path);
-        this.writeCheck(path);
-        this.fs.append(path, data);
-    }
-    prepend(path, data) {
-        path = this.ensureFPath(path);
-        this.writeCheck(path);
-        this.fs.prepend(path, data);
-    }
-    mkdir(path) {
-        path = this.ensureFPath(path);
-        this.createCheck(path);
-        this.fs.mkdir(path, this.user.name);
-    }
-    touch(path) {
-        path = this.ensureFPath(path);
-        this.createCheck(path);
-        this.fs.touch(path, this.user.name);
-    }
-    read(path) {
-        path = this.ensureFPath(path);
-        this.readCheck(path);
-        return this.fs.read(path) || "";
-    }
-    delete(path) {
-        path = this.ensureFPath(path);
-        this.writeCheck(path);
-        this.fs.delete(path);
-    }
-    resolve(path) {
-        const p = PathResolver.resolve(path, this.cwd, this.user.name);
-        return p;
-    }
-    abreviate(path) {
-        path = this.ensureFPath(path);
-        return PathResolver.abreviate(path.path, this.cwd, this.user.name);
-    }
-    createCheck(path) {
-        if (!this.canRead(path.parent)) {
-            throw `'${path.parent}' does not exist [CC]`;
-        }
-        if (!this.isDir(path.parent)) {
-            throw `'${path.parent}' is not a directory [CC]`;
-        }
-        if (!this.canWrite(path.parent)) {
-            throw `'${path.parent}' access denied [CC]`;
-        }
-        if (this.fs.exists(path)) {
-            throw `${path} already exists [CC]`;
-        }
-    }
-    writeCheck(path) {
-        if (!this.fs.exists(path)) {
-            this.touch(path);
-        }
-        if (!this.canWrite(path)) {
-            throw `${path} access denied [WC]`;
-        }
-    }
-    readCheck(path) {
-        if (!this.canRead(path)) {
-            throw `${path} access denied [RC]`;
-        }
-    }
-    executeCheck(path) {
-        if (!this.canExecute(path)) {
-            throw `${path} is not executable [EC]`;
-        }
-    }
-    canRead(path) {
-        path = this.ensureFPath(path);
-        if (path.isRoot)
-            return true;
-        if (!this.exists(path)) {
-            console.log("READ NOT EXIST");
-            return false;
-        }
-        return this.fs.getPerm(path).canRead(this.user);
-    }
-    canWrite(path) {
-        path = this.ensureFPath(path);
-        if (!this.exists(path)) {
-            return false;
-        }
-        return this.fs.getPerm(path).canWrite(this.user);
-    }
-    canExecute(path) {
-        path = this.ensureFPath(path);
-        if (path.isRoot)
-            return true;
-        if (!this.exists(path)) {
-            return false;
-        }
-        return this.fs.getPerm(path).canExecute(this.user);
-    }
-    exists(path) {
-        path = this.ensureFPath(path);
-        if (!this.fs.isType(path.parent, FSType.dir)) {
-            console.log("EXISTS PARENT NOT DIR");
-            return false;
-        }
-        const perm = this.fs.getPerm(path.parent);
-        if (!perm.canRead(this.user)) {
-            console.log(`EXISTS PARENT NOT PERM ${perm}`);
-            return false;
-        }
-        return this.fs.exists(path);
-    }
-    isDir(path) {
-        path = this.ensureFPath(path);
-        return this.isType(path, FSType.dir);
-    }
-    ensureFPath(path) {
-        if (typeof path === "string")
-            path = new FPath(path, this.cwd, this.user.name);
-        return path;
-    }
-    isFile(path) {
-        path = this.ensureFPath(path);
-        return this.isType(path, FSType.file);
-    }
-    isType(path, type) {
-        path = this.ensureFPath(path);
-        this.readCheck(path);
-        return this.fs.getType(path) == type;
-    }
-    get cwd() {
-        return this._cwd;
-    }
-    setCwd(path) {
-        path = this.ensureFPath(path);
-        if (!this.canExecute(path)) {
-            throw `${path} access denied`;
-        }
-        if (!this.isDir(path)) {
-            throw `${path} is not a directory`;
-        }
-        this._cwd = path.path;
-        this.user.setEnv("cwd", path.path);
-    }
-    chmod(path, perm) {
-        path = this.ensureFPath(path);
-        this.writeCheck(path);
-        const access = this.fs.getPerm(path);
-        access.setPerm(perm);
-        this.fs.setPerm(path, access);
-    }
-    chown(path, owner, group) {
-        path = this.ensureFPath(path);
-        this.writeCheck(path);
-        const access = this.fs.getPerm(path);
-        access.setOwner(owner);
-        access.setGroup(group || access.group);
-        this.fs.setPerm(path, access);
-    }
-    list(path, trim = false) {
-        const fpath = this.ensureFPath(path);
-        this.executeCheck(fpath);
-        let items = this.fs.list(fpath);
-        items = items.filter(i => this.canRead(i));
-        if (trim) {
-            items = items.map(key => trim ? key.substr(fpath.path.length + (fpath.path == "/" ? 0 : 1)) : key);
-        }
-        return items;
-    }
-    getPerm(path) {
-        path = this.ensureFPath(path);
-        this.readCheck(path);
-        return this.fs.getPerm(path);
-    }
-}
-exports.FileSystemHandle = FileSystemHandle;
-class FileSystem {
-    mkdir(path, owner, group = null) {
-        this.setType(path, FSType.dir);
-        this.setPerm(path, new FSAccess("755", owner, group || owner));
-    }
-    touch(path, owner, group = null) {
-        this.setType(path, FSType.file);
-        this.setPerm(path, new FSAccess("644", owner, group || owner));
-        this.write(path, "");
-    }
-    setType(path, type) {
-        setItem("FS:T:" + path.path, type);
-    }
-    setPerm(path, perm) {
-        setItem("FS:P:" + path.path, perm.toString());
-    }
-    isType(path, type) {
-        return this.getType(path) == type;
-    }
-    getType(path) {
-        const t = getItem("FS:T:" + path.path) || "";
-        return FSType[t] || null;
-    }
-    read(path) {
-        const t = this.getType(path);
-        let v = getItem("FS:D:" + path.path);
-        if (t == FSType.link) {
-            v = getItem("FS:D:" + v);
-        }
-        return v;
-    }
-    write(path, data) {
-        const t = this.getType(path);
-        let p = path.path;
-        if (t == FSType.link) {
-            p = getItem("FS:D:" + p) || p;
-        }
-        setItem("FS:D:" + p, data);
-        const perm = this.getPerm(path);
-        perm.modifyTime = (Date.now() / 1000 | 0);
-        this.setPerm(path, perm);
-    }
-    delete(path) {
-        const t = this.getType(path);
-        if (t !== null) {
-            setItem(`!FS:T:${path.path}`, t);
-            localStorage.removeItem(`FS:T:${path.path}`);
-            if (t == FSType.file) {
-                setItem(`!FS:D:${path.path}`, this.read(path) || "");
-                localStorage.removeItem(`FS:D:${path.path}`);
-            }
-            setItem(`!FS:P:${path.path}`, this.getPerm(path).toString());
-            localStorage.removeItem(`FS:P:${path.path}`);
-        }
-    }
-    append(path, data) {
-        this.write(path, this.read(path) + data);
-    }
-    prepend(path, data) {
-        this.write(path, data + this.read(path));
-    }
-    exists(path) {
-        return this.getType(path) != null;
-    }
-    getPerm(path) {
-        const str = getItem("FS:P:" + path.path) || "";
-        const perm = FSAccess.fromAccessString(str);
-        if (perm.accessUndefined) {
-            this.setPerm(path, perm);
-        }
-        return perm;
-    }
-    list(path, deleted = false) {
-        return Object.keys(localStorage)
-            .filter(key => key.startsWith("FS:T:") || (deleted ? key.startsWith("!FS:T:") : false))
-            .map(key => key.substr(5))
-            .filter(key => key.startsWith(path.path + (path.path == "/" ? "" : "/")) && key.length > path.path.length)
-            .filter(key => !key.substr(path.path.length + (path.path == "/" ? 0 : 1)).includes("/"));
-    }
-}
-var FSType;
-(function (FSType) {
-    FSType["file"] = "file";
-    FSType["dir"] = "dir";
-    FSType["in"] = "in";
-    FSType["out"] = "out";
-    FSType["link"] = "link";
-})(FSType || (FSType = {}));
-(new FileSystem()).mkdir(new FPath("/", "/", "root"), "root", "root");
-(new FileSystem()).mkdir(new FPath("/bin", "/", "root"), "root", "root");
-(new FileSystem()).mkdir(new FPath("/home", "/", "root"), "root", "root");
-(new FileSystem()).mkdir(new FPath("/home/guest", "/", "root"), "guest", "guest");
-(new FileSystem()).mkdir(new FPath("/home/wolfgang", "/", "root"), "wolfgang", "wolfgang");
-(new FileSystem()).mkdir(new FPath("/root", "/", "root"), "root", "root");
-(new FileSystem()).mkdir(new FPath("/etc", "/", "root"), "root", "root");
-(new FileSystem()).mkdir(new FPath("/etc/shell", "/", "root"), "root", "root");
-
-
-/***/ }),
-
-/***/ 221:
-/***/ ((__unused_webpack_module, exports) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-class Process {
-    constructor(pid, system, binary, args, parent = null) {
-        var _a;
-        this._parent = null;
-        this._pid = pid;
-        this._system = system;
-        this._binary = binary;
-        this._parent = parent;
-        this.args = args;
-        try {
-            this._instance = new this._binary(this);
-        }
-        catch (e) {
-            (_a = this.parent) === null || _a === void 0 ? void 0 : _a.input("\u001B[31mError\u001B[0m: Failed to start process", "error");
-            this._instance = new DummyProc();
-        }
-    }
-    kill() {
-        var _a;
-        (_a = this.instance) === null || _a === void 0 ? void 0 : _a.kill();
-        this._instance = null;
-    }
-    end(input) {
-        var _a;
-        (_a = this._instance) === null || _a === void 0 ? void 0 : _a.end(input);
-        this._instance = null;
-    }
-    hookOut(hook, ident = null) {
-        var _a;
-        (_a = this.instance) === null || _a === void 0 ? void 0 : _a.hookOut(hook, ident);
-    }
-    input(input, ident = null) {
-        var _a;
-        (_a = this.instance) === null || _a === void 0 ? void 0 : _a.input(input, ident);
-    }
-    get system() {
-        return this._system;
-    }
-    get user() {
-        return this.system.user;
-    }
-    get pid() {
-        return this._pid;
-    }
-    get instance() {
-        return this._instance;
-    }
-    get parent() {
-        return this._parent;
-    }
-    get fileSystem() {
-        return this.system.fileSystem;
-    }
-    run() {
-        var _a;
-        const out = (_a = this.instance) === null || _a === void 0 ? void 0 : _a.run(this.args);
-        return out || Promise.reject("INSTANCE FAILE");
-    }
-    createProcess(location, args) {
-        let bin = null;
-        let loc = this.fileSystem.resolve(location);
-        if (this.fileSystem.exists(loc)) {
-            if (location.startsWith("/") || location.startsWith("./")) {
-                bin = this.fileSystem.read(loc);
-            }
-        }
-        if (bin === null) {
-            loc = this.getBinPath(location);
-            if (loc != null) {
-                bin = this.fileSystem.read(loc);
-            }
-        }
-        if (bin == null || loc == null)
-            throw `${location} is not a recognized program\n`;
-        if (!this.fileSystem.canExecute(loc))
-            throw `${loc} is not executable\n`;
-        const first = bin.split("\n")[0];
-        if (first.startsWith("#!")) {
-            const handler = first.substr(2).trim().split(" ");
-            const app = handler.shift() || "";
-            if ((app === null || app === void 0 ? void 0 : app.length) > 0) {
-                return this.createProcess(app, [...handler, "-s", loc, ...args]);
-            }
-        }
-        const proc = this.system.createProcess(bin, args, this);
-        return proc;
-    }
-    getBinPath(name) {
-        const paths = this.getAvailablePrograms();
-        const path = paths.find(v => v[1].includes(name)) || null;
-        if (path == null)
-            return path;
-        return path[0] + "/" + name;
-    }
-    getAvailablePrograms() {
-        const path = (this.user.getEnv("path") || "/bin").split(";");
-        return path.map(p => [p, this.fileSystem.list(p, true)]);
-    }
-    log(...args) {
-        console.log(`Proc[${this.pid}]: `, ...args);
-    }
-}
-exports.default = Process;
-class DummyProc {
-    end(_input) {
-        throw new Error("Method not implemented.");
-    }
-    run(_args) {
-        return Promise.resolve("");
-    }
-    kill() {
-    }
-    hookOut(_hook, _ident) {
-    }
-    input(_input, _ident) {
-    }
-}
-
-
-/***/ }),
-
-/***/ 978:
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.System = exports.SystemHandle = void 0;
-const UserIdent_1 = __webpack_require__(895);
-const FileSystem_1 = __webpack_require__(14);
-const Display_1 = __importDefault(__webpack_require__(925));
-const Process_1 = __importDefault(__webpack_require__(221));
-class SystemHandle {
-    constructor(user, fs = null) {
-        this.PathResolver = FileSystem_1.PathResolver;
-        this._user = user;
-        this.fs = fs || new FileSystem_1.FileSystemHandle(this.user);
-    }
-    get user() {
-        return this._user;
-    }
-    get fileSystem() {
-        return this.fs;
-    }
-    clone() {
-        const user = this.user.clone();
-        const fs = this.fs.clone(user);
-        return new SystemHandle(user, fs);
-    }
-    createSystemHandle(name, pass = null) {
-        if (name == this.user.name)
-            return new SystemHandle(this.user);
-        const root = new UserIdent_1.UserIdent("root", ["root"]);
-        const fs = new FileSystem_1.FileSystemHandle(root);
-        const shadow = fs.read("/etc/shadow").split("\n");
-        const line = (shadow.find(item => item.startsWith(name)) || "").split(":");
-        if (line.length > 1) {
-            if (line[1] == pass) {
-                const user = new UserIdent_1.UserIdent(name, [name]);
-                return new SystemHandle(user);
-            }
-        }
-        throw "User Not found";
-    }
-    createProcess(bin, args, creator) {
-        return System.createProcess(bin, this, args, creator);
-    }
-}
-exports.SystemHandle = SystemHandle;
-const EVAL = window.eval;
-window.eval = (...args) => console.log("Eval Attempted", args);
-class System {
-    static createProcess(bin, system, args, creator) {
-        let next = null;
-        try {
-            next = EVAL(bin).default || null;
-        }
-        catch (e) {
-            throw e.toString() + "\n";
-        }
-        System.processCount++;
-        return new Process_1.default(System.processCount, system.clone(), next, args, creator);
-    }
-    static setup(system) {
-        return System.loadRoot(system, () => true, true)
-            .then(() => {
-            if (System.isDev) {
-                window.setInterval(() => System.loadRoot(system, (s) => s.startsWith("/bin/")), 10000);
-            }
-        });
-    }
-    static async loadRoot(system, filter, output = false) {
-        const response = await fetch("root.json");
-        const txt = await response.text();
-        const hashB = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(txt));
-        const hashA = Array.from(new Uint8Array(hashB));
-        const hash = hashA.map(a => a.toString(16).padStart(2, "0")).join("");
-        if (hash == System.rootHash)
-            return;
-        console.log("root changed", hash);
-        System.rootHash = hash;
-        const json = JSON.parse(txt);
-        if (json == null)
-            throw "root json is null";
-        if (output)
-            Display_1.default.instance.input("Installing...\n", "setup");
-        for (const e of Object.entries(json)) {
-            const path = e[0];
-            if (!filter(path))
-                return;
-            const file = e[1] || null;
-            if (typeof file == "object" && file != null && file.hasOwnProperty("content")) {
-                if (output)
-                    Display_1.default.instance.input(`\t${path}...`, "setup");
-                const len = Math.floor(`${path}...`.length / 8);
-                if (!system.fileSystem.exists(path) && !System.isDev) {
-                    await (new Promise(res => window.setTimeout(() => res(0), 200)));
-                }
-                system.fileSystem.write(path, file["content"] || "");
-                const perms = (file["perm"] || "root:root:0755").split(":");
-                system.fileSystem.chmod(path, perms[2] || "755");
-                system.fileSystem.chown(path, perms[0] || "root", perms[1] || "root");
-                if (output)
-                    Display_1.default.instance.input(`${(new Array(5 - len)).join("\t")}\u001B[32mDone\u001B[0m\n`, "setup");
-            }
-            else {
-                console.log(e);
-            }
-        }
-        console.groupEnd();
-        if (output) {
-            if (!System.isDev) {
-                Display_1.default.instance.input("Complete!!!", "setup");
-                await (new Promise(res => window.setTimeout(() => res(0), 1000)));
-            }
-            Display_1.default.instance.input("\u001B[J", "setup");
-        }
-    }
-    static get isDev() {
-        return location.hostname == "127.0.0.1";
-    }
-    static boot() {
-        const root = new UserIdent_1.UserIdent("root", ["root"]);
-        const rootSysHandle = new SystemHandle(root);
-        document.onkeypress = ev => {
-            System.keyInput(ev.key);
-            return false;
-        };
-        document.onkeydown = ev => {
-            switch (ev.key) {
-                case "Backspace":
-                case "Tab":
-                case "ArrowUp":
-                case "ArrowDown":
-                case "ArrowLeft":
-                case "ArrowRight":
-                case "Home":
-                case "End":
-                    System.keyInput(ev.key);
-                    return false;
-                case "c":
-                    if (ev.ctrlKey && !ev.altKey && !ev.shiftKey) {
-                        System.keyInput("\u0018");
-                        return false;
-                    }
-                default:
-                    break;
-            }
-        };
-        System.setup(rootSysHandle)
-            .then(() => {
-            const shell = rootSysHandle.fileSystem.read("/bin/shell");
-            const guest = new UserIdent_1.UserIdent("guest", ["guest"]);
-            const guestSysHandle = new SystemHandle(guest);
-            guestSysHandle.fileSystem.setCwd("~");
-            const proc = System.createProcess(shell, guestSysHandle, ["--motd"], null);
-            Display_1.default.hookOut(proc);
-            System.hookInput(proc);
-            return proc.run();
-        })
-            .then(() => {
-            console.log("out");
-        }).catch(_e => {
-            const disp = document.getElementById("main-display");
-            while (disp === null || disp === void 0 ? void 0 : disp.firstChild) {
-                disp.removeChild(disp.firstChild);
-            }
-            console.log(_e);
-        });
-    }
-    static hookInput(input) {
-        System.inputHooks.push(input);
-    }
-    static keyInput(ev) {
-        System.inputHooks.forEach(hook => hook.input(ev, "user"));
-    }
-}
-exports.System = System;
-System.processCount = 0;
-System.inputHooks = [];
-System.rootHash = "";
-
-
-/***/ }),
-
-/***/ 895:
-/***/ ((__unused_webpack_module, exports) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.UserIdent = void 0;
-class UserIdent {
-    constructor(name, groups) {
-        this._env = {
-            "PATH": "/bin"
-        };
-        this._name = name;
-        this._groups = groups;
-    }
-    get name() {
-        return this._name;
-    }
-    get groups() {
-        return [...this._groups];
-    }
-    getEnv(key) {
-        key = key.toUpperCase().trim();
-        if (key == "USER")
-            return this.name;
-        return this._env[key] || null;
-    }
-    setEnv(key, value) {
-        key = key.toUpperCase().trim();
-        this._env[key] = value;
-    }
-    listEnv() {
-        return Object.entries(this._env);
-    }
-    remEnv(key) {
-        key = key.toUpperCase().trim();
-        if (this._env.hasOwnProperty(key)) {
-            delete this._env[key];
-        }
-    }
-    clone() {
-        const user = new UserIdent(this.name, this.groups);
-        this.listEnv().forEach(v => user.setEnv(v[0], v[1]));
-        return user;
-    }
-}
-exports.UserIdent = UserIdent;
-
-
-/***/ }),
-
-/***/ 804:
-/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-const LexerStream_1 = __importDefault(__webpack_require__(93));
-class DisplayLexer {
-    constructor(input, tokes) {
-        this.tokes = [];
-        this.input = input;
-        this.tokes = tokes;
-    }
-    static createFromString(input, tokes) {
-        return new DisplayLexer(new LexerStream_1.default(input), tokes);
-    }
-    all() {
-        this.rewind();
-        let next = this.next();
-        const all = [];
-        while (next != null) {
-            all.push(next);
-            next = this.next();
-        }
-        return all;
-    }
-    eof() {
-        return this.input.eof();
-    }
-    rewind() {
-        this.input.rewind();
-    }
-    next() {
-        if (this.input.eof())
-            return null;
-        if (this.nextIsStarter()) {
-            return this.readToken();
-        }
-        else {
-            return this.input.next();
-        }
-    }
-    nextIsStarter() {
-        return this.isStarter(this.input.peek());
-    }
-    isStarter(s) {
-        return this.tokes.some(t => t.s.test(s));
-    }
-    readToken() {
-        const ch = this.input.peek();
-        const toke = this.tokes.find(t => t.s.test(ch)) || null;
-        if (toke == null) {
-            throw new Error("WAT");
-        }
-        const end = toke.e;
-        if (end == null) {
-            return this.input.next();
-        }
-        else {
-            return this.readUntil(s => end.test(s));
-        }
-    }
-    readUntil(func) {
-        let str = "";
-        while (!this.input.eof()) {
-            const s = this.input.next();
-            str += s;
-            if (func(s, this.input.peek()))
-                break;
-        }
-        return str;
-    }
-}
-exports.default = DisplayLexer;
+exports.default = PathResolver;
 
 
 /***/ })
@@ -1465,10 +1645,18 @@ var exports = __webpack_exports__;
 var __webpack_unused_export__;
 
 __webpack_unused_export__ = ({ value: true });
-const FileSystem_1 = __webpack_require__(14);
 const System_1 = __webpack_require__(978);
-window.PathResolver = FileSystem_1.PathResolver;
-System_1.System.boot();
+(() => {
+    const ready = (fn) => {
+        if (document.readyState != 'loading') {
+            fn();
+        }
+        else {
+            document.addEventListener('DOMContentLoaded', fn);
+        }
+    };
+    ready(() => System_1.System.boot());
+})();
 
 })();
 
