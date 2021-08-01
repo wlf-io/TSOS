@@ -20,7 +20,7 @@ const fixBins = (bin, path) => {
     path = path.pop();
     bin = bin.replace(`//# sourceMappingURL=${path}.map`, `//# sourceMappingURL=/root/bin/${path}.map`);
     bin = bin.replace('var __webpack_exports__ =', 'return');
-    return "#!\n" + bin;
+    return "#!iProcessInstance\n" + bin;
 };
 
 

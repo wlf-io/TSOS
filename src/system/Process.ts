@@ -88,7 +88,7 @@ export default class Process implements iProcess {
         if (first.startsWith("#!")) {
             const handler = first.substr(2).trim().split(" ");
             const app = handler.shift() || "";
-            if (app?.length > 0) {
+            if (app.length > 0 && app != "iProcessInstance") {
                 return this.createProcess(app, [...handler, "-s", loc, ...args]);
             }
         }
