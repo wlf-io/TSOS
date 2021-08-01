@@ -1,0 +1,16 @@
+#!/bin/shell
+
+echo "Welcome to \033[32mwlf.io\033[0m TSOS. A pseudo terminal for fun and .... well no profit really...";
+echo "";
+
+if "/usr/bin/help" is exec;
+    echo "\tTry the help command to see what you can do";
+    echo "";
+endif;
+
+if "~/.last_login" is file;
+    echo -e "Last Login: ";
+    cat "~/.last_login";
+endif;
+
+echo ${date} > "~/.last_login";

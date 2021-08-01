@@ -2,6 +2,11 @@ import BaseApp from "./base/base";
 
 export default class cp extends BaseApp {
 
+    protected helpText =
+        ` Usage: cp [options]... [source] [destination]
+ Copy file from source to destionation
+
+\t-f\t\t\tforce`;
     private force: boolean = false;
 
     handleFlag(flag: string, _arg: string) {

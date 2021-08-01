@@ -111,6 +111,7 @@ export default class ShellRunner implements IOFeed {
             }
         } catch (e) {
             this.output(e.toString().trim() + ` : Line ${this.getBlockStartLine(this.block)}\n`, "error");
+            console.log(this.blocks);
         }
         this.perf.end("run");
         if (this.shell.process.system.isDebug && this.tag.startsWith("script:")) console.log(this.tag + "\n" + this.perf.perf().join("\n"));
@@ -195,7 +196,6 @@ export default class ShellRunner implements IOFeed {
         if (name == "goto") return this.goto(args[0] || "", block);
         if (name == "endif") return "";
         if (name == "if") return this.conditional(args, block);
-        if (name == "ifnot") return this.conditional(args, block, "ifnot", "endif", "else", true);
         if (name == "else") return this.skipElse(block);
         if (name == "set") return this.set(args, block);
         if (name == "len") return this.len(args, block);
@@ -222,7 +222,83 @@ export default class ShellRunner implements IOFeed {
         if (name == "perfstart") { this.perf.start(args[0] || "script"); return ""; };
         if (name == "perfend") { this.perf.end(args[0] || "script"); return ""; };
         if (name == "perfout") { console.log(args[0], this.perf.getTimes(args[0]) || []); return ""; };
+        if (name == "split") return this.split(args, block);
+        if (name == "append") return this.append(args, block);
+        if (name == "join") return this.join(args, block);
+        if (name == "unique") return this.unique(args, block);
         return false;
+    }
+
+
+    private unique(args: string[], block: number): string {
+        if (![1, 2].includes(args.length)) {
+            throw `split needs 1 or 2 arguments: Line ${this.getBlockStartLine(block)}`;
+        }
+
+        let data: string = args.pop() || "[]";
+        const vr: string | null = args.pop() || null;
+
+        data = this.stringIffy(
+            [...(new Set(this.arrayIffy(data)))]
+        );
+
+        if (vr) {
+            return this.set([vr, data], block);
+        }
+        return data;
+    }
+
+
+    private append(args: string[], block: number): string {
+        if (![2, 3].includes(args.length)) {
+            throw `append needs 2 or 3 arguments: Line ${this.getBlockStartLine(block)}`;
+        }
+
+        const data2: string = args.pop() || "[]";
+        const data1: string = args.pop() || "[]";
+        const vr: string | null = args.pop() || null;
+
+        const data = this.stringIffy([...this.arrayIffy(data1), ...this.arrayIffy(data2)]);
+
+        if (vr) {
+            return this.set([vr, data], block);
+        }
+        return data;
+    }
+
+
+    private split(args: string[], block: number): string {
+        if (![2, 3].includes(args.length)) {
+            throw `split needs 2 or 3 arguments: Line ${this.getBlockStartLine(block)}`;
+        }
+
+        const sep: string = args.pop() || ",";
+        let data: string = args.pop() || "";
+        const vr: string | null = args.pop() || null;
+
+        data = this.stringIffy(data.split(sep));
+
+        if (vr) {
+            return this.set([vr, data], block);
+        }
+        return data;
+    }
+
+    private join(args: string[], block: number): string {
+        if (![2, 3].includes(args.length)) {
+            throw `join needs 2 or 3 arguments: Line ${this.getBlockStartLine(block)}`;
+        }
+
+        const sep: string = args.pop() || ",";
+        let data: string = args.pop() || "";
+        const vr: string | null = args.pop() || null;
+
+        data = this.arrayIffy(data).join(sep);
+
+        if (vr) {
+            return this.set([vr, data], block);
+        }
+        return data;
     }
 
     private skipElse(block: number) {
@@ -436,26 +512,25 @@ export default class ShellRunner implements IOFeed {
     }
 
     private math(args: string[], func: (a: number, b: number) => number, name: string, block: number): string {
-        if (args.length != 2) {
-            throw `${name} can only take 2 variables: Line ${this.getBlockStartLine(block)}\n`;
+        if (![2, 3].includes(args.length)) {
+            throw `${name} can only take 2 or 3 arguments: Line ${this.getBlockStartLine(block)}\n`;
         }
 
-        let a: string | number = args[0] || "0";
-        let isVar: null | string = null;
-        let b: string | number = args[1] || "0";
 
+        let b: string | number = args.pop() || "0";
+        let a: string | number = args.pop() || "0"
 
-        if (isNaN(parseFloat(a))) {
-            isVar = a;
-            a = this.getVar(a);
-        }
+        a = parseFloat(a) || 0;
+        b = parseFloat(b) || 0;
 
-        a = parseInt(a) || 0;
-        b = parseInt(b) || 0;
-        if (isVar !== null) {
-            return this.set([args[0], func(a, b).toString()], block);
+        const vr = args.pop() || null;
+
+        const result = func(a, b).toString();
+
+        if (vr !== null) {
+            return this.set([vr, result], block);
         } else {
-            return func(a, b).toString();
+            return result;
         }
     }
 
@@ -466,25 +541,28 @@ export default class ShellRunner implements IOFeed {
         return this.shell.setVar(args[0], args[1], this.varScopePrefix);
     }
 
-    private conditional(args: string[], block: number, start: string = "if", end: string = "endif", endAlt: string | null = "else", invert: boolean = false): string {
-        if (args.length != 3 && args.length != 1) {
-            throw `if can only take 1 or 3 variables: Line ${this.getBlockStartLine(block)}\n`;
+    private conditional(args: string[], block: number, start: string = "if", end: string = "endif", endAlt: string | null = "else"): string {
+        if (![1, 3, 4].includes(args.length)) {
+            throw `if can only take 1 or 3 or 4 variables: Line ${this.getBlockStartLine(block)}\n`;
         }
 
-        const a = (args[0]).toString();
-        const b = (args[2] || "0").toString();
+        const len = args.length;
+
+        const b = args.pop() || "0";
+        const op = args.pop() || "";
+        const a = args.pop() || "0"
+
+        const mod = (args.pop() || "").trim().toLowerCase();
 
         const intA = parseInt(a) || 0;
         const intB = parseInt(b) || 0
 
         let pass: boolean = false;
 
-        if (args.length == 1) {
+        if (len == 1) {
             pass = intA != 0 || a.length > 0;
         } else {
-            const op = (args[1] || "").toString();
-
-            switch (args[1] || "") {
+            switch (op) {
                 case "==":
                 case "=":
                     pass = a == b;
@@ -515,7 +593,7 @@ export default class ShellRunner implements IOFeed {
             }
         }
 
-        if (invert) {
+        if (mod == "not" || mod == "!") {
             pass = !pass;
         }
 
@@ -542,7 +620,14 @@ export default class ShellRunner implements IOFeed {
             case "file":
                 return this.shell.process.fileSystem.isFile(a.trim());
             case "exec":
+            case "executable":
                 return this.shell.process.fileSystem.canExecute(a.trim()) && this.shell.process.fileSystem.isFile(a.trim());
+            case "read":
+            case "readable":
+                return this.shell.process.fileSystem.canRead(a.trim());
+            case "write":
+            case "writeable":
+                return this.shell.process.fileSystem.canWrite(a.trim());
             case "dir":
                 return this.shell.process.fileSystem.isDir(a.trim());
             case "int":

@@ -1,6 +1,7 @@
 import { iFAccess, iFileSystem, iUserIdent } from "../interfaces/SystemInterfaces";
 import { FPath, FSAccess, FSType } from "./filesystem/FSModels";
 import PathResolver from "./filesystem/PathResolver";
+import { System } from "./System";
 
 const _setItem = Storage.prototype.setItem;
 const _getItem = Storage.prototype.getItem;
@@ -21,10 +22,11 @@ type FSCache = { [k: string]: { P: string, T: string, D?: string } };
 
 
 const _cache: FSCache = {};
-
+let writeReasons: [string, string][] = [];
 const setItem = (key: string, type: FSTypeKey, value: string) => {
     if (!_cache.hasOwnProperty(key)) _cache[key] = { P: "", T: "" };
     _cache[key][type] = value;
+    writeReasons.push([key, type]);
     queueWrite();
 }
 
@@ -48,16 +50,23 @@ const queueWrite = () => {
     }
     writeTick = window.setTimeout(() => {
         _setItem.apply(window.localStorage, ["FS", JSON.stringify(_cache)]);
+        if (System.isDebug) {
+            console.log(writeReasons);
+        }
+        writeReasons = [];
         writeTick = null;
     }, 5000);
 }
 
 const forceSaveCache = () => {
-    if (writeTick != null) {
-        window.clearTimeout(writeTick);
-        writeTick = null;
+    if (!System.isDebug || writeTick != null) {
+        if (writeTick != null) {
+            window.clearTimeout(writeTick);
+            writeTick = null;
+        }
+        _setItem.apply(window.localStorage, ["FS", JSON.stringify(_cache)]);
+        console.log("FORCE SAVE");
     }
-    _setItem.apply(window.localStorage, ["FS", JSON.stringify(_cache)]);
 };
 
 
@@ -181,20 +190,25 @@ export class FileSystemHandle implements iFileSystem {
 
     private writeCheck(path: FPath): void {
         if (!this.fs.exists(path)) {
-            this.touch(path);
-        }
-        if (!this.canWrite(path)) {
+            this.createCheck(path);
+        } else if (!this.canWrite(path)) {
             throw `${path} access denied [WC]`;
         }
     }
 
     private readCheck(path: FPath): void {
+        if (!this.exists(path)) {
+            throw `${path.path} no such file`;
+        }
         if (!this.canRead(path)) {
-            throw `${path} access denied [RC]`;
+            throw `${path.path} access denied [RC]`;
         }
     }
 
     private executeCheck(path: FPath): void {
+        if (!this.exists(path)) {
+            throw `${path.path} no such file`;
+        }
         if (!this.canExecute(path)) {
             throw `${path} is not executable [EC]`;
         }

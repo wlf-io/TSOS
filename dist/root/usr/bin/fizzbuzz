@@ -4,11 +4,11 @@ func fizzbuzz num;
 
     set out $num;
 
-    ifnot $num % 3;
+    if not $num % 3;
         set out "$out fizz";
     endif;
 
-    ifnot $num % 5;
+    if not $num % 5;
         set out "$out buzz";
     endif;
 

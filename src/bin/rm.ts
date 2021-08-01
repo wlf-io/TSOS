@@ -2,6 +2,13 @@ import BaseApp from "./base/base";
 
 export default class rm extends BaseApp {
 
+    protected helpText =
+        ` Usage: rm [option]... [path]...
+ Delete files/directories.
+
+\t-f\t\t\tforce
+\t-r\t\t\tdelete recursivley`;
+
     private recursive: boolean = false;
     private force: boolean = false;
 

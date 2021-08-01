@@ -2,6 +2,12 @@ import BaseApp from "./base/base";
 
 export default class mv extends BaseApp {
 
+    protected helpText =
+        ` Usage: mv [options]... [source] [destination]
+ Move file from source to destionation
+
+\t-f\t\t\tforce`;
+
     private force: boolean = false;
 
     handleFlag(flag: string, _arg: string) {

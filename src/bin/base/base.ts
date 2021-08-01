@@ -18,7 +18,7 @@ export default abstract class BaseApp implements iProcessInstance {
 
     protected fs: iFileSystem;
 
-    protected helpText: string = "helptext missing";
+    protected helpText: string = "";
 
     constructor(proc: iProcess) {
         this.proc = proc;
@@ -39,7 +39,7 @@ export default abstract class BaseApp implements iProcessInstance {
 
     protected fail(reason: string): void {
         this.state = AppState.crashed;
-        this.endPromise.rej(reason + "\n");
+        this.endPromise.rej(this.constructor.name + ": " + reason + "\n");
     }
 
     kill(): void {
@@ -52,14 +52,15 @@ export default abstract class BaseApp implements iProcessInstance {
         this.outHooks.push([hook, ident]);
     }
 
-    protected output(out: iOutput) {
+    protected output(out: iOutput, ident?: string) {
         if (this.state != AppState.running) return;
-        this.outHooks.forEach(hook => hook[0].input(out, hook[1]));
+        this.outHooks.forEach(hook => hook[0].input(out, ident || hook[1]));
     }
 
     public input(input: iOutput, ident: string): void {
         if (this.state != AppState.running) this.queueInput(input, ident);
         else if (input == "\u0018") this.end("");
+        else if (ident == "output") this.output(input, ident);
         else this.passInput(input, ident);
     }
 
@@ -147,7 +148,14 @@ export default abstract class BaseApp implements iProcessInstance {
     }
 
     private outputHelp() {
-        this.endOutput(this.helpText + "\n");
+        try {
+            this.endOutput(
+                (this.helpText || this.fs.read(`/etc/man/${this.constructor.name}`))
+                + "\n"
+            );
+        } catch (e) {
+            this.fail(e);
+        }
     }
 
 }

@@ -55,6 +55,8 @@ export default class ShellLexer {
         const line = this.stream.line + 1;
         const column = this.stream.column;
 
+        // if (line == 38) console.log(ch);
+
         // if (ch == "\n") {
         //     this.stream.next();
         //     return {
@@ -178,6 +180,8 @@ export default class ShellLexer {
         switch (char) {
             case "n":
                 return "\n";
+            case "\\":
+                return "\\\\";
             case "t":
                 return "\t";
             case "$":

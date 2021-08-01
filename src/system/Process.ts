@@ -35,6 +35,7 @@ export default class Process implements iProcess {
     hookOut(hook: IOFeed, ident: string | null = null): void {
         this.instance?.hookOut(hook, ident);
     }
+
     input(input: iOutput, ident: string | null = null): void {
         this.instance?.input(input, ident);
     }

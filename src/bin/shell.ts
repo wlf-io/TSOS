@@ -21,7 +21,16 @@ export default class shell extends BaseApp {
     private shellRunning: ShellRunner | null = null;
     private subRunners: ShellRunner[] = [];
 
-    private profile: boolean = true;
+    private profile: boolean = false;
+
+
+    protected helpText =
+        ` Usage: shell [option]... [args]...
+ List files/directories and information about them.
+
+\t-s\t--script\texecute script specified after flag
+\t-c\t\t\texecute the command specified after the flag
+\t-p\t--profile\tload the profile script at start`;
 
     protected handleFlag(flag: string, arg: string): boolean {
         switch (flag.toLowerCase()) {
@@ -41,7 +50,8 @@ export default class shell extends BaseApp {
                 this.test = true;
                 break;
             case "p":
-                this.profile = false;
+            case "profile":
+                this.profile = true;
                 break;
         }
         return false;

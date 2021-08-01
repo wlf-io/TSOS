@@ -1,6 +1,12 @@
 import BaseApp from "./base/base";
 
 export default class mkdir extends BaseApp {
+    protected helpText =
+        ` Usage: mkdir [option]... [path]...
+ Create directories
+
+\t-s\t\t\tsilence, suppress errors ( does not mean it will succeed )
+\t-p\t\t\tmake parent directories as required`;
 
     private silent: boolean = false;
     private makeParent: boolean = false;

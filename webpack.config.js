@@ -105,26 +105,7 @@ module.exports = env => {
                             const sys = await readFile(path.resolve(__dirname, "dist/system.js"));
                             const sysHash = crypto.createHash("sha256").update(sys).digest("hex");
                             const hash = crypto.createHash("sha256").update(sysHash + fsset.join("")).digest("hex");
-                            await writeFile(path.resolve(__dirname, "dist/root.json"), JSON.stringify({ fs, hash }, null, 2));
-                            // deepFiles(
-
-                            // )
-                            // fs.readdir(
-                            //     path.resolve(__dirname, "root"),
-                            //     (err, files) => {
-                            //         const srcs = {};
-                            //         files
-                            //             .filter(f => !f.endsWith(".map"))
-                            //             .forEach(file => {
-                            //                 let content = fs.readFileSync(path.resolve(__dirname, "dist/bin", file), "utf-8");
-                            //                 
-
-                            //                 srcs[file.substr(0, file.length - 3)] = content;
-                            //             });
-                            //         fs.writeFileSync(path.resolve(__dirname, "dist/bin.json"), JSON.stringify(srcs, null, 2));
-                            //         console.log("Output BIN JSON");
-                            //     }
-                            // );
+                            await writeFile(path.resolve(__dirname, "dist/root.json"), JSON.stringify({ fs, sysHash, hash }, null, 2));
                         }
                     )
                 }

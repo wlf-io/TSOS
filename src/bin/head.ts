@@ -2,6 +2,12 @@ import BaseApp from "./base/base";
 
 export default class head extends BaseApp {
 
+    protected helpText =
+        ` Usage: head [option]... [path]...
+ print out lines of a file starting from the beginning
+
+\t-n\t\t\tnumber of lines to show ( default 5 )`;
+
     private lines: number = 5;
 
     public start(args: string[]): void {

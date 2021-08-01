@@ -2,6 +2,10 @@ import BaseApp from "./base/base";
 
 export default class cd extends BaseApp {
 
+    protected helpText =
+        ` Usage: cd [path]
+ Change the current directory to another`;
+
     public start(args: string[]): void {
         const proc = this.proc.parent;
         console.log(args);

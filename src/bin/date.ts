@@ -2,13 +2,19 @@ import BaseApp from "./base/base";
 
 export default class date extends BaseApp {
 
-    private newline: boolean = true;
+    protected helpText =
+        ` Usage: date [option]...
+ Print current date
+
+\t-n\t-e\t\tdo not append trailing new line`;
+
+    private trail: string = "\n";
 
     handleFlag(flag: string, _arg: string) {
         switch (flag) {
             case "e":
             case "n":
-                this.newline = false;
+                this.trail = "";
                 break;
         }
         return false;
@@ -16,6 +22,6 @@ export default class date extends BaseApp {
 
     public start(_args: string[]): void {
         const date = new Date();
-        this.endOutput(date.toISOString() + (this.newline ? "\n" : ""));
+        this.endOutput(date.toISOString() + this.trail);
     }
 }

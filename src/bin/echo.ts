@@ -2,6 +2,12 @@ import BaseApp from "./base/base";
 
 export default class echo extends BaseApp {
 
+    protected helpText =
+        ` Usage: echo [option]... [text]...
+ Echo specified text
+
+\t-n\t-e\t\tdo not append trailing new line`;
+
     private newLine: boolean = true;
 
     protected handleFlag(flag: string, _arg: string): boolean {

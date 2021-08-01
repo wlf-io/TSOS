@@ -2,6 +2,12 @@ import BaseApp from "./base/base";
 
 export default class touch extends BaseApp {
 
+    protected helpText =
+        ` Usage: touch [option]... [path]...
+ Create files
+
+\t-s\t\t\tsilent, suppress errors ( does not mean it will succeed )`;
+
     private silent: boolean = false;
     // private makeParent: boolean = false;
 

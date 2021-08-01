@@ -2,6 +2,12 @@ import BaseApp from "./base/base";
 
 export default class tail extends BaseApp {
 
+    protected helpText =
+        ` Usage: tail [option]... [path]...
+ print out lines of a file starting from the end
+
+\t-n\t\t\tnumber of lines to show ( default 5 )`;
+
     private lines: number = 5;
 
     public start(args: string[]): void {

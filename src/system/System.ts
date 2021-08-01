@@ -59,10 +59,12 @@ export class SystemHandle implements iSystem {
 const EVAL = window.eval;
 window.eval = (...args) => console.log("Eval Attempted", args);
 
+type RootJSON = { fs: { [k: string]: { content: string, perm: string, hash: string } }, hash: string };
+
 export class System {
     private static processCount: number = 0;
-    private static inputHooks: IOFeed[] = [];
-    private static rootHash: string = "";
+    private static rootHash: { [k: string]: string } = {};
+    private static display: IOFeed | null;
 
 
     private static debugging: boolean = false;
@@ -87,7 +89,7 @@ export class System {
         return System.debugging;
     }
 
-    private static toggleDebug() {
+    public static toggleDebug() {
         System.debugging = !System.debugging;
         const pre = document.getElementById("debug");
         if (pre instanceof HTMLElement) {
@@ -106,11 +108,22 @@ export class System {
         return new Process(System.processCount, system.clone(), next, args, creator);
     }
 
-    public static setup(system: iSystem) {
+    public static loadSystemHash(system: iSystem) {
         if (system.fileSystem.isFile("/etc/version_hash")) {
-            System.rootHash = (system.fileSystem.read("/etc/version_hash") || "").trim();
+            const raw = (system.fileSystem.read("/etc/version_hash") || "{}").trim();
+            try {
+                System.rootHash = JSON.parse(raw);
+            } catch (e) {
+                System.rootHash = {};
+            }
+            if (typeof System.rootHash !== "object" || System.rootHash == null) {
+                System.rootHash = {};
+            }
         }
-        if (System.isDev) System.toggleDebug();
+    }
+
+    public static setup(system: iSystem) {
+        this.loadSystemHash(system);
         return System.loadRoot(system, () => true, true)
             .then(() => {
                 if (System.isDev) {
@@ -119,46 +132,62 @@ export class System {
             });
     }
 
-    private static async loadRoot(system: iSystem, filter: ((s: string) => boolean), output: boolean = false) {
+    private static rootHashChanged(hash: string): boolean {
+        const pass = System.rootHash["root"] !== hash;
+        if (pass) {
+            console.log("Hash Change: ", System.rootHash, "to", hash);
+            System.rootHash["root"] = hash;
+        }
+        return pass;
+    }
+
+    private static async fetchRootJSON(): Promise<RootJSON> {
         const response = await fetch("root.json");
-        const fjson = await response.json();
+        return await response.json();
+    }
+
+    private static async loadRoot(system: iSystem, filter: ((s: string) => boolean), output: boolean = false) {
+
+        const fjson = await System.fetchRootJSON();
+
         if (fjson == null) throw "root json is null";
-        const hash = fjson.hash || null;
-        if (System.rootHash == hash) return;
-        console.log("Hash Change: ", System.rootHash, "to", hash);
-        System.rootHash = hash;
+
+        if (!System.rootHashChanged(fjson.hash || "")) return;
+
         const json = fjson.fs || null;
         if (json == null) throw "root fs json is null";
-        if (output) Display.instance.input("Installing...\n", "setup");
+
+        if (output) System.display?.input("Installing...\n", "setup");
         for (const e of Object.entries(json)) {
             const path = e[0];
             if (!filter(path)) return;
             const file = e[1] || null;
             if (typeof file == "object" && file != null && file.hasOwnProperty("content")) {
-                if (output) Display.instance.input(`\t${path}...`, "setup");
-                const len = Math.floor(`${path}...`.length / 8);
+
+                if (output) System.display?.input(`\t${path}...${(new Array(5 - Math.floor(`${path}...`.length / 8))).join("\t")}`, "setup");
+
                 if (!system.fileSystem.exists(path) && !System.isDev) {
                     await (new Promise(res => window.setTimeout(() => res(0), 200)));
                 }
-                //@ts-ignore
                 system.fileSystem.write(path, file["content"] || "");
-                //@ts-ignore
                 const perms = (file["perm"] || "root:root:0755").split(":");
                 system.fileSystem.chmod(path, perms[2] || "755");
                 system.fileSystem.chown(path, perms[0] || "root", perms[1] || "root");
-                if (output) Display.instance.input(`${(new Array(5 - len)).join("\t")}\u001B[32mDone\u001B[0m\n`, "setup");
+
+                System.rootHash[path] = file.hash || "";
+
+                if (output) System.display?.input(`\u001B[32mDone\u001B[0m\n`, "setup");
             } else {
                 console.log(e);
             }
         }
-        system.fileSystem.write("/etc/version_hash", `${hash}\n`);
-        console.groupEnd();
+        system.fileSystem.write("/etc/version_hash", `${JSON.stringify(System.rootHash)}\n`);
         if (output) {
             if (!System.isDev) {
-                Display.instance.input("Complete!!!", "setup");
+                System.display?.input("Complete!!!", "setup");
                 await (new Promise(res => window.setTimeout(() => res(0), 1000)));
             }
-            Display.instance.input("\u001B[J", "setup");
+            System.display?.input("\u001B[J", "setup");
         }
     }
 
@@ -167,57 +196,22 @@ export class System {
     }
 
     public static async boot() {
+        if (System.isDev) System.toggleDebug();
+        this.display = Display;
+        console.group("Boot");
         await FileSystem.boot();
         const root = new UserIdent("root", ["root"]);
         const rootSysHandle = new SystemHandle(root);
-        document.onkeypress = ev => {
-            System.keyInput(ev.key);
-            return false;
-        };
-        document.onkeydown = ev => {
-            switch (ev.key) {
-                case "Backspace":
-                case "Tab":
-                case "ArrowUp":
-                case "ArrowDown":
-                case "ArrowLeft":
-                case "ArrowRight":
-                case "Home":
-                case "End":
-                case "Delete":
-                    System.keyInput(ev.key);
-                    return false;
-                case "c":
-                    if (ev.ctrlKey && !ev.altKey && !ev.shiftKey) {
-                        System.keyInput("\u0018");
-                        return false;
-                    }
-                case "a":
-                    if (ev.ctrlKey) return false;
-                    break;
-                case "d":
-                    if (ev.ctrlKey && ev.altKey) {
-                        System.toggleDebug();
-                        return false;
-                    }
-                case "Alt":
-                case "Shift":
-                case "Control":
-                    break;
-                default:
-                    // console.log(ev);
-                    break;
-            }
-        };
         System.setup(rootSysHandle)
             .then(() => {
+                console.groupEnd();
                 const shell = rootSysHandle.fileSystem.read("/bin/shell");
                 const guest = new UserIdent("guest", ["guest"]);
                 const guestSysHandle = new SystemHandle(guest);
                 guestSysHandle.fileSystem.setCwd("~");
-                const proc = System.createProcess(shell, guestSysHandle, ["--motd"], null);
-                Display.hookOut(proc);
-                System.hookInput(proc);
+                const proc = System.createProcess(shell, guestSysHandle, ["-p", "--motd"], null);
+                System.display?.hookOut(proc, "display");
+                // System.hookInput(proc);
                 return proc.run();
             })
             .then(() => {
@@ -230,13 +224,5 @@ export class System {
                 // location.reload();
                 console.log(_e);
             });
-    }
-
-    private static hookInput(input: IOFeed): void {
-        System.inputHooks.push(input);
-    }
-
-    private static keyInput(ev: string): void {
-        System.inputHooks.forEach(hook => hook.input(ev, "user"));
     }
 }

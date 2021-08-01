@@ -8,15 +8,27 @@ export default class ls extends BaseApp {
     private humanReadable: boolean = false;
     private colour: boolean = true;
 
+    protected helpText =
+        ` Usage: ls [option]... [path]...
+ List files/directories and information about them.
+
+\t-a\t--all\t\tshow hidden entries ( those starting with . )
+\t-l\t\t\toutput long format with more information
+\t-h\t--human\t\tshow file sizes and permissions in more a
+\t\t\t\tmore readable format
+\t-c\t\t\tdisable colouring of output`;
+
     protected handleFlag(flag: string, _arg: string): boolean {
         switch (flag.toLowerCase()) {
             case "a":
+            case "all":
                 this.showAll = true;
                 break;
             case "l":
                 this.longForm = true;
                 break;
             case "h":
+            case "human":
                 this.humanReadable = true;
                 break;
             case "c":

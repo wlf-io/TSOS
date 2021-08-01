@@ -3,6 +3,13 @@ import BaseApp from "./base/base";
 
 export default class write extends BaseApp {
 
+    protected helpText =
+        ` Usage: write [options]... [input] [path]
+ write [input] to [file]
+
+\t-a\t\t\tappend to file
+\t-e\t-n\t\tdo not add trailing newline`;
+
     private append: boolean = false;
     private trail: boolean = true;
 

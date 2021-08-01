@@ -8,31 +8,31 @@
     "/etc/passwd": {
         "perm": "root:root:600"
     },
-    "/usr/bin/test.sh": {
+    "/usr/bin/test": {
         "perm": "root:root:755"
     },
-    "/usr/bin/rm.sh": {
+    "/usr/bin/test-rm": {
         "perm": "root:root:755"
     },
-    "/usr/bin/loop.sh": {
+    "/usr/bin/test-loop": {
         "perm": "root:root:755"
     },
-    "/usr/bin/fizzbuzz.sh": {
+    "/usr/bin/fizzbuzz": {
         "perm": "root:root:755"
     },
-    "/usr/bin/fizzbuzznew.sh": {
+    "/usr/bin/test-nested": {
         "perm": "root:root:755"
     },
-    "/usr/bin/nested.sh": {
+    "/usr/bin/test-array": {
         "perm": "root:root:755"
     },
-    "/usr/bin/array.sh": {
+    "/usr/bin/test-return": {
         "perm": "root:root:755"
     },
-    "/usr/bin/return.sh": {
+    "/usr/bin/test-conway": {
         "perm": "root:root:755"
     },
-    "/usr/bin/conway.sh": {
+    "/usr/bin/help": {
         "perm": "root:root:755"
     }
 }

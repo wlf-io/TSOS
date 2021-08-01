@@ -2,6 +2,10 @@ import BaseApp from "./base/base";
 
 export default class ping extends BaseApp {
 
+    protected helpText =
+        ` Usage: ping [address]
+ ping and address to get communication time.`;
+
     private count: number = 5;
 
     public start(args: string[]): void {

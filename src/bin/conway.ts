@@ -17,6 +17,20 @@ export default class conway extends BaseApp {
 
     private teams: number = 1;
 
+
+    protected helpText =
+        ` Usage: conway [options]...
+ An implementation of conways game of life with immigrant feature
+
+\t-g=#\t\t\tset grid size x and y
+\t-x=#\t\t\tset grid size x
+\t-y=#\t\t\tset grid size y
+\t-d=path\t\tload specified datafile as starting state
+\t-f=#\t--frams=#\trun simulation for specified ammount of frames ( default 100 )
+\t-s=#\t--speed=#\tset time to sleep between frames in ms ( speed ) ( default 10 )
+\t-t=#\t\t\tset team count
+\t-r\t\t\trandomize starting state`;
+
     protected handleFlag(flag: string, arg: string): boolean {
         switch (flag.toLowerCase()) {
             case "g":
@@ -36,6 +50,7 @@ export default class conway extends BaseApp {
                 this.frames = parseInt(arg || "100") || 100;
                 return true;
             case "s":
+            case "speed":
                 this.sleep = parseInt(arg || "10");
                 if (this.sleep == NaN) this.sleep = 10;
                 return true;
@@ -115,18 +130,20 @@ export default class conway extends BaseApp {
     private outputGrid(grid: ConwayGrid) {
         let str = `${EscapeCodes.ESC}[J${this.frames}\n`;
 
+        let last = 0;
         for (const row of grid) {
             for (const col of row) {
 
-                str += this.colourise(col ? "▓▓" : "░░", col);
+                str += this.colourise(col ? "▓▓" : "░░", col, last);
+                last = col;
             }
             str += "\n";
         }
         this.output(str);
     }
 
-    private colourise(str: string, team: number) {
-        if (this.teams == 1) return str;
+    private colourise(str: string, team: number, lastTeam: number) {
+        if (this.teams == 1 || lastTeam == team) return str;
         let col = 0;
         switch (team) {
             case 1:

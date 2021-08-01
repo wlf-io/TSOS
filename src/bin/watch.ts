@@ -3,6 +3,10 @@ import BaseApp, { AppState } from "./base/base";
 
 export default class watch extends BaseApp {
 
+    protected helpText =
+        ` Usage: watch [arguments]...
+ run a command repeatedly to monitor its output`;
+
     private time = 2;
 
     public async start(_args: string[]) {

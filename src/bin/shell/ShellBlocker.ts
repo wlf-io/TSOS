@@ -23,8 +23,12 @@ export default class ShellBlocker {
         while (!this.lexer.eof()) {
             const next = this.lexer.next();
             if (next == null) continue;
-            if (next.value == "" && next.raw != '""' && next.raw != "''") continue;
-            if (next.value == ";") {
+            // if (next.line == 38) console.log(next);
+            if (next.value == "" && next.raw != '""' && next.raw != "''") {
+                // console.log("skipping", next);
+                continue;
+            }
+            if (next.raw == ";") {
                 this.blocks.push(currentBlock);
                 currentBlock = new ShellBlock();
                 continue;
@@ -67,6 +71,7 @@ export default class ShellBlocker {
 
 
 export class ShellBlock {
+    public line: number = 0;
     public tokens: ShellToken[] = [];
     public passInput: boolean = false;
     public passOutput: boolean = false;
@@ -76,6 +81,7 @@ export class ShellBlock {
     }
 
     public push(token: ShellToken) {
+        if (this.tokens.length < 1) this.line = token.line;
         this.tokens.push(token);
     }
 

@@ -1,0 +1,92 @@
+#!/bin/shell
+
+if "/etc/shell/help" is file;
+    cat /etc/shell/help;
+endif;
+
+echo "   /= = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =\\";
+echo "  /= = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =\\";
+echo " ||                                                               ||";
+echo " ||     Welcome to TSOS                            (by wlf.io)    ||";
+echo " ||                                                               ||";
+echo " ||                                                               ||";
+echo " ||      This site mimics a rudimentry nix like commandline       ||";
+echo " ||                                                               ||";
+echo " ||        Commands available:                                    ||";
+echo " ||                                                               ||";
+
+split paths $path ";";
+
+set len ${count $paths};
+
+set index 0;
+
+set bins "[]";
+
+while $index < $len;
+
+    set newbins ${fromindex ${ls -c ${fromindex $paths $index}} 0};
+
+    append bins $bins $newbins;
+
+    sum index $index 1;
+endwhile;
+
+set index 0;
+set len ${count $bins};
+
+set str "";
+
+while $index < $len;
+
+    fromindex bin $bins $index;
+
+    set extra "";
+    
+    if not $index % 4;
+        set bin " || $bin";
+        if $index > 0;
+            set extra "  ||\n";
+        endif;
+    endif;
+
+    len binl $bin;
+
+    set tab "";
+    if $binl < 16;
+        set tab "{$tab}\t";
+        if $binl < 8;
+            set tab "{$tab}\t";
+        endif;
+    endif;
+
+    set str "{$str}{$extra}{$bin}{$tab}";
+
+    sum index $index 1;
+
+endwhile;
+
+#echo $bins;
+
+mod mod $index 4;
+
+set ll 0;
+
+if $mod > 0;
+    sub ll 4 $mod;
+endif;
+
+while $ll > 0;
+
+    set str "{$str}\t\t";
+
+    sub ll $ll 1;
+endwhile;
+
+echo "$str  ||";
+
+echo " ||                                                               ||";
+echo " || commands usually support the --help argument for further info ||";
+echo " ||                                                               ||";
+echo "  \\= = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =/";
+echo "   \\= = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =/";
