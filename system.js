@@ -948,7 +948,7 @@ class Process {
         if (first.startsWith("#!")) {
             const handler = first.substr(2).trim().split(" ");
             const app = handler.shift() || "";
-            if ((app === null || app === void 0 ? void 0 : app.length) > 0) {
+            if (app.length > 0 && app != "iProcessInstance") {
                 return this.createProcess(app, [...handler, "-s", loc, ...args]);
             }
         }
