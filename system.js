@@ -486,7 +486,6 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.FileSystem = exports.FileSystemHandle = void 0;
 const FSModels_1 = __webpack_require__(958);
 const PathResolver_1 = __importDefault(__webpack_require__(268));
-const System_1 = __webpack_require__(978);
 const _setItem = Storage.prototype.setItem;
 const _getItem = Storage.prototype.getItem;
 const _removeItem = Storage.prototype.removeItem;
@@ -500,80 +499,51 @@ Storage.prototype.removeItem = (_key) => {
     throw "Blocked";
 };
 const _cache = {};
-let _cachePending = [];
-const setItem = (key, value) => {
-    _cache[key] = value;
-    _cachePending.push(key);
-    _cachePending = [...(new Set(_cachePending))];
+const setItem = (key, type, value) => {
+    console.log("Write", key, type, value);
+    if (!_cache.hasOwnProperty(key))
+        _cache[key] = { P: "", T: "" };
+    _cache[key][type] = value;
     queueWrite();
 };
 const loadCache = () => {
-    Object.keys(window.localStorage).forEach(k => {
-        _cache[k] = _getItem.apply(window.localStorage, [k]) || "";
-    });
+    Object.keys(_cache).forEach(k => delete _cache[k]);
+    const store = JSON.parse(_getItem.apply(window.localStorage, ["FS"]) || "{}");
+    Object.entries(store).forEach(e => _cache[e[0]] = e[1]);
 };
 const getKeys = () => {
     return Object.keys(_cache);
 };
 let writeTick = null;
-let writeStart = 0;
 const queueWrite = () => {
-    if (writeTick !== null)
-        return;
-    if (writeStart == 0) {
-        System_1.System.debug("Disk Write Pending", _cachePending.length);
-        System_1.System.debug("Disk Write Done", null);
-        System_1.System.debug("Disk Write Time", null);
-        writeStart = performance.now();
+    if (writeTick !== null) {
+        window.clearTimeout(writeTick);
+        writeTick = null;
     }
     writeTick = window.setTimeout(() => {
-        if (_cachePending.length > 0) {
-            const key = _cachePending.shift();
-            if (key) {
-                if (_cache.hasOwnProperty(key)) {
-                    _setItem.apply(window.localStorage, [key, _cache[key]]);
-                }
-            }
-        }
+        _setItem.apply(window.localStorage, ["FS", JSON.stringify(_cache)]);
         writeTick = null;
-        System_1.System.debug("Disk Write Pending", _cachePending.length);
-        if (_cachePending.length > 0) {
-            queueWrite();
-        }
-        else {
-            writeStart = 0;
-            System_1.System.debug("Disk Write Done", (new Date()).toTimeString());
-            System_1.System.debug("Disk Write Time", performance.now() - writeStart);
-            window.setTimeout(() => {
-                System_1.System.debug("Disk Write Pending", null);
-                System_1.System.debug("Disk Write Done", null);
-                System_1.System.debug("Disk Write Time", null);
-            }, 10000);
-        }
-    }, 50);
+    }, 5000);
 };
 const forceSaveCache = () => {
     if (writeTick != null) {
         window.clearTimeout(writeTick);
+        writeTick = null;
     }
-    _cachePending.forEach(key => {
-        if (_cache.hasOwnProperty(key)) {
-            _setItem.apply(window.localStorage, [key, _cache[key]]);
-        }
-    });
-    console.log(`Wrote ${_cachePending.length} keys`);
+    _setItem.apply(window.localStorage, ["FS", JSON.stringify(_cache)]);
+    console.log(`FS SAVED`);
 };
-const getItem = (key) => {
-    return _cache[key] || null;
+const getItem = (key, type) => {
+    return (_cache[key] || {})[type] || null;
 };
 const removeItem = (key) => {
     if (_cache.hasOwnProperty(key)) {
+        getKeys()
+            .filter(k => k.startsWith(key + "/"))
+            .forEach(k => removeItem(k));
+        _cache[`!${key}`] = JSON.parse(JSON.stringify(_cache[key]));
         delete _cache[key];
     }
-    _removeItem.apply(window.localStorage, [key]);
-    getKeys()
-        .filter(k => k.startsWith(key + "/"))
-        .forEach(k => removeItem(k));
 };
 class FileSystemHandle {
     constructor(user) {
@@ -800,23 +770,23 @@ class FileSystem {
         this.write(path, data || "");
     }
     setType(path, type) {
-        setItem("FS:T:" + path.path, type);
+        setItem(path.path, "T", type);
     }
     setPerm(path, perm) {
-        setItem("FS:P:" + path.path, perm.toString());
+        setItem(path.path, "P", perm.toString());
     }
     isType(path, type) {
         return this.getType(path) == type;
     }
     getType(path) {
-        const t = getItem("FS:T:" + path.path) || "";
+        const t = getItem(path.path, "T") || "";
         return FSModels_1.FSType[t] || null;
     }
     read(path) {
         const t = this.getType(path);
-        let v = getItem("FS:D:" + path.path);
+        let v = getItem(path.path, "D");
         if (t == FSModels_1.FSType.link) {
-            v = getItem("FS:D:" + v);
+            v = getItem(v + "", "D");
         }
         return v;
     }
@@ -824,9 +794,9 @@ class FileSystem {
         const t = this.getType(path);
         let p = path.path;
         if (t == FSModels_1.FSType.link) {
-            p = getItem("FS:D:" + p) || p;
+            p = getItem(p, "D") || p;
         }
-        setItem("FS:D:" + p, data);
+        setItem(p, "D", data);
         const perm = this.getPerm(path);
         perm.modifyTime = (Date.now() / 1000 | 0);
         this.setPerm(path, perm);
@@ -834,14 +804,7 @@ class FileSystem {
     delete(path) {
         const t = this.getType(path);
         if (t !== null) {
-            setItem(`!FS:T:${path.path}`, t);
-            removeItem(`FS:T:${path.path}`);
-            if (t == FSModels_1.FSType.file) {
-                setItem(`!FS:D:${path.path}`, this.read(path) || "");
-                removeItem(`FS:D:${path.path}`);
-            }
-            setItem(`!FS:P:${path.path}`, this.getPerm(path).toString());
-            removeItem(`FS:P:${path.path}`);
+            removeItem(path.path);
         }
     }
     append(path, data) {
@@ -867,22 +830,21 @@ class FileSystem {
         }
     }
     getPerm(path) {
-        const str = getItem("FS:P:" + path.path) || "";
+        const str = getItem(path.path, "P") || "";
         const perm = FSModels_1.FSAccess.fromAccessString(str);
         if (perm.accessUndefined) {
             this.setPerm(path, perm);
         }
         return perm;
     }
-    list(path, deleted = false) {
+    list(path, _deleted = false) {
         return getKeys()
-            .filter(key => key.startsWith("FS:T:") || (deleted ? key.startsWith("!FS:T:") : false))
-            .map(key => key.substr(5))
             .filter(key => key.startsWith(path.path + (path.path == "/" ? "" : "/")) && key.length > path.path.length)
             .filter(key => !key.substr(path.path.length + (path.path == "/" ? 0 : 1)).includes("/"));
     }
     static async boot() {
         const permRoot = new FSModels_1.FSAccess("755", "root", "root");
+        loadCache();
         (new FileSystem()).mkdir(new FSModels_1.FPath("/", "/", "root"), permRoot);
         (new FileSystem()).mkdir(new FSModels_1.FPath("/bin", "/", "root"), permRoot);
         (new FileSystem()).mkdir(new FSModels_1.FPath("/home", "/", "root"), permRoot);
@@ -893,7 +855,6 @@ class FileSystem {
         (new FileSystem()).mkdir(new FSModels_1.FPath("/etc/shell", "/", "root"), permRoot);
         (new FileSystem()).mkdir(new FSModels_1.FPath("/usr", "/", "root"), permRoot);
         (new FileSystem()).mkdir(new FSModels_1.FPath("/usr/bin", "/", "root"), permRoot);
-        loadCache();
         window.onbeforeunload = () => {
             forceSaveCache();
         };
