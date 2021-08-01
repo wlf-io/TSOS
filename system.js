@@ -2,6 +2,41 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
+/***/ 497:
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+class EscapeCodes {
+}
+exports.default = EscapeCodes;
+EscapeCodes.NULL = "\u0000";
+EscapeCodes.SOH = "\u0001";
+EscapeCodes.STX = "\u0002";
+EscapeCodes.ETX = "\u0003";
+EscapeCodes.EOT = "\u0004";
+EscapeCodes.ENQ = "\u0005";
+EscapeCodes.ACK = "\u0006";
+EscapeCodes.BEL = "\u0007";
+EscapeCodes.BS = "\u0008";
+EscapeCodes.HT = "\u0009";
+EscapeCodes.LF = "\u000A";
+EscapeCodes.VT = "\u000B";
+EscapeCodes.FF = "\u000C";
+EscapeCodes.CR = "\u000D";
+EscapeCodes.CAN = "\u0018";
+EscapeCodes.ESC = "\u001B";
+EscapeCodes.DEL = "\u007F";
+EscapeCodes.BELL = EscapeCodes.BEL;
+EscapeCodes.BACKSPACE = EscapeCodes.BS;
+EscapeCodes.TAB = EscapeCodes.HT;
+EscapeCodes.NEWLINE = EscapeCodes.LF;
+EscapeCodes.CANCEL = EscapeCodes.CAN;
+EscapeCodes.DELETE = EscapeCodes.DEL;
+
+
+/***/ }),
+
 /***/ 93:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -69,7 +104,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+const EscapeCodes_1 = __importDefault(__webpack_require__(497));
 const DisplayLexer_1 = __importDefault(__webpack_require__(804));
+const System_1 = __webpack_require__(978);
 class Display {
     static get instance() {
         if (Display._instance === null) {
@@ -82,6 +119,12 @@ class Display {
     }
     static hookOut(io, ident = null) {
         io.hookOut(Display.instance, ident);
+        Display.instance.hookOut(io, "display");
+    }
+    static input(input, ident) {
+        Display.instance.input(input, ident);
+    }
+    static end() {
     }
 }
 exports.default = Display;
@@ -118,6 +161,7 @@ class DisplayInstance {
         this.container = elem;
         this.emptyElem(this.container);
         this.container.append(document.createElement("span"));
+        this.hookKeys();
     }
     end(_input) {
         throw new Error("Method not implemented.");
@@ -214,7 +258,9 @@ class DisplayInstance {
         this.container.scrollTop = this.container.scrollHeight;
     }
     output(output, ident) {
-        this.outHooks.forEach(h => h[0].input(output, ident || h[1]));
+        this.outHooks.forEach(h => {
+            h[0].input(output, ident || h[1]);
+        });
     }
     emptyElem(elem) {
         while (elem.firstChild) {
@@ -470,6 +516,50 @@ class DisplayInstance {
         var snd = new Audio("data:audio/wav;base64,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qJrx4KOQjahZxWbcZgztj2c49nKmkId44S71j0c8eV9yDK6uPRzx5X18eDvjvQ6yKo9ZSS6l//8elePK/Lf//IInrOF/FvDoADYAGBMGb7FtErm5MXMlmPAJQVgWta7Zx2go+8xJ0UiCb8LHHdftWyLJE0QIAIsI+UbXu67dZMjmgDGCGl1H+vpF4NSDckSIkk7Vd+sxEhBQMRU8j/12UIRhzSaUdQ+rQU5kGeFxm+hb1oh6pWWmv3uvmReDl0UnvtapVaIzo1jZbf/pD6ElLqSX+rUmOQNpJFa/r+sa4e/pBlAABoAAAAA3CUgShLdGIxsY7AUABPRrgCABdDuQ5GC7DqPQCgbbJUAoRSUj+NIEig0YfyWUho1VBBBA//uQZB4ABZx5zfMakeAAAAmwAAAAF5F3P0w9GtAAACfAAAAAwLhMDmAYWMgVEG1U0FIGCBgXBXAtfMH10000EEEEEECUBYln03TTTdNBDZopopYvrTTdNa325mImNg3TTPV9q3pmY0xoO6bv3r00y+IDGid/9aaaZTGMuj9mpu9Mpio1dXrr5HERTZSmqU36A3CumzN/9Robv/Xx4v9ijkSRSNLQhAWumap82WRSBUqXStV/YcS+XVLnSS+WLDroqArFkMEsAS+eWmrUzrO0oEmE40RlMZ5+ODIkAyKAGUwZ3mVKmcamcJnMW26MRPgUw6j+LkhyHGVGYjSUUKNpuJUQoOIAyDvEyG8S5yfK6dhZc0Tx1KI/gviKL6qvvFs1+bWtaz58uUNnryq6kt5RzOCkPWlVqVX2a/EEBUdU1KrXLf40GoiiFXK///qpoiDXrOgqDR38JB0bw7SoL+ZB9o1RCkQjQ2CBYZKd/+VJxZRRZlqSkKiws0WFxUyCwsKiMy7hUVFhIaCrNQsKkTIsLivwKKigsj8XYlwt/WKi2N4d//uQRCSAAjURNIHpMZBGYiaQPSYyAAABLAAAAAAAACWAAAAApUF/Mg+0aohSIRobBAsMlO//Kk4soosy1JSFRYWaLC4qZBYWFRGZdwqKiwkNBVmoWFSJkWFxX4FFRQWR+LsS4W/rFRb/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////VEFHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAU291bmRib3kuZGUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMjAwNGh0dHA6Ly93d3cuc291bmRib3kuZGUAAAAAAAAAACU=");
         snd.play();
     }
+    hookKeys() {
+        document.onkeypress = ev => {
+            this.keyInput(ev.key);
+            return false;
+        };
+        document.onkeydown = ev => {
+            switch (ev.key) {
+                case "Backspace":
+                case "Tab":
+                case "ArrowUp":
+                case "ArrowDown":
+                case "ArrowLeft":
+                case "ArrowRight":
+                case "Home":
+                case "End":
+                case "Delete":
+                    this.keyInput(ev.key);
+                    return false;
+                case "c":
+                    if (ev.ctrlKey && !ev.altKey && !ev.shiftKey) {
+                        this.keyInput(EscapeCodes_1.default.CANCEL);
+                        return false;
+                    }
+                case "a":
+                    if (ev.ctrlKey)
+                        return false;
+                    break;
+                case "d":
+                    if (ev.ctrlKey && ev.altKey) {
+                        System_1.System.toggleDebug();
+                        return false;
+                    }
+                case "Alt":
+                case "Shift":
+                case "Control":
+                    break;
+                default:
+                    break;
+            }
+        };
+    }
+    keyInput(ev) {
+        this.output(ev, "user");
+    }
 }
 
 
@@ -486,6 +576,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.FileSystem = exports.FileSystemHandle = void 0;
 const FSModels_1 = __webpack_require__(958);
 const PathResolver_1 = __importDefault(__webpack_require__(268));
+const System_1 = __webpack_require__(978);
 const _setItem = Storage.prototype.setItem;
 const _getItem = Storage.prototype.getItem;
 const _removeItem = Storage.prototype.removeItem;
@@ -499,10 +590,12 @@ Storage.prototype.removeItem = (_key) => {
     throw "Blocked";
 };
 const _cache = {};
+let writeReasons = [];
 const setItem = (key, type, value) => {
     if (!_cache.hasOwnProperty(key))
         _cache[key] = { P: "", T: "" };
     _cache[key][type] = value;
+    writeReasons.push([key, type]);
     queueWrite();
 };
 const loadCache = () => {
@@ -521,15 +614,22 @@ const queueWrite = () => {
     }
     writeTick = window.setTimeout(() => {
         _setItem.apply(window.localStorage, ["FS", JSON.stringify(_cache)]);
+        if (System_1.System.isDebug) {
+            console.log(writeReasons);
+        }
+        writeReasons = [];
         writeTick = null;
     }, 5000);
 };
 const forceSaveCache = () => {
-    if (writeTick != null) {
-        window.clearTimeout(writeTick);
-        writeTick = null;
+    if (!System_1.System.isDebug || writeTick != null) {
+        if (writeTick != null) {
+            window.clearTimeout(writeTick);
+            writeTick = null;
+        }
+        _setItem.apply(window.localStorage, ["FS", JSON.stringify(_cache)]);
+        console.log("FORCE SAVE");
     }
-    _setItem.apply(window.localStorage, ["FS", JSON.stringify(_cache)]);
 };
 const getItem = (key, type) => {
     return (_cache[key] || {})[type] || null;
@@ -635,18 +735,24 @@ class FileSystemHandle {
     }
     writeCheck(path) {
         if (!this.fs.exists(path)) {
-            this.touch(path);
+            this.createCheck(path);
         }
-        if (!this.canWrite(path)) {
+        else if (!this.canWrite(path)) {
             throw `${path} access denied [WC]`;
         }
     }
     readCheck(path) {
+        if (!this.exists(path)) {
+            throw `${path.path} no such file`;
+        }
         if (!this.canRead(path)) {
-            throw `${path} access denied [RC]`;
+            throw `${path.path} access denied [RC]`;
         }
     }
     executeCheck(path) {
+        if (!this.exists(path)) {
+            throw `${path.path} no such file`;
+        }
         if (!this.canExecute(path)) {
             throw `${path} is not executable [EC]`;
         }
@@ -1082,12 +1188,22 @@ class System {
         System.processCount++;
         return new Process_1.default(System.processCount, system.clone(), next, args, creator);
     }
-    static setup(system) {
+    static loadSystemHash(system) {
         if (system.fileSystem.isFile("/etc/version_hash")) {
-            System.rootHash = (system.fileSystem.read("/etc/version_hash") || "").trim();
+            const raw = (system.fileSystem.read("/etc/version_hash") || "{}").trim();
+            try {
+                System.rootHash = JSON.parse(raw);
+            }
+            catch (e) {
+                System.rootHash = {};
+            }
+            if (typeof System.rootHash !== "object" || System.rootHash == null) {
+                System.rootHash = {};
+            }
         }
-        if (System.isDev)
-            System.toggleDebug();
+    }
+    static setup(system) {
+        this.loadSystemHash(system);
         return System.loadRoot(system, () => true, true)
             .then(() => {
             if (System.isDev) {
@@ -1095,21 +1211,30 @@ class System {
             }
         });
     }
-    static async loadRoot(system, filter, output = false) {
+    static rootHashChanged(hash) {
+        const pass = System.rootHash["root"] !== hash;
+        if (pass) {
+            console.log("Hash Change: ", System.rootHash, "to", hash);
+            System.rootHash["root"] = hash;
+        }
+        return pass;
+    }
+    static async fetchRootJSON() {
         const response = await fetch("root.json");
-        const fjson = await response.json();
+        return await response.json();
+    }
+    static async loadRoot(system, filter, output = false) {
+        var _a, _b, _c, _d, _f;
+        const fjson = await System.fetchRootJSON();
         if (fjson == null)
             throw "root json is null";
-        const hash = fjson.hash || null;
-        if (System.rootHash == hash)
+        if (!System.rootHashChanged(fjson.hash || ""))
             return;
-        console.log("Hash Change: ", System.rootHash, "to", hash);
-        System.rootHash = hash;
         const json = fjson.fs || null;
         if (json == null)
             throw "root fs json is null";
         if (output)
-            Display_1.default.instance.input("Installing...\n", "setup");
+            (_a = System.display) === null || _a === void 0 ? void 0 : _a.input("Installing...\n", "setup");
         for (const e of Object.entries(json)) {
             const path = e[0];
             if (!filter(path))
@@ -1117,8 +1242,7 @@ class System {
             const file = e[1] || null;
             if (typeof file == "object" && file != null && file.hasOwnProperty("content")) {
                 if (output)
-                    Display_1.default.instance.input(`\t${path}...`, "setup");
-                const len = Math.floor(`${path}...`.length / 8);
+                    (_b = System.display) === null || _b === void 0 ? void 0 : _b.input(`\t${path}...${(new Array(5 - Math.floor(`${path}...`.length / 8))).join("\t")}`, "setup");
                 if (!system.fileSystem.exists(path) && !System.isDev) {
                     await (new Promise(res => window.setTimeout(() => res(0), 200)));
                 }
@@ -1126,78 +1250,44 @@ class System {
                 const perms = (file["perm"] || "root:root:0755").split(":");
                 system.fileSystem.chmod(path, perms[2] || "755");
                 system.fileSystem.chown(path, perms[0] || "root", perms[1] || "root");
+                System.rootHash[path] = file.hash || "";
                 if (output)
-                    Display_1.default.instance.input(`${(new Array(5 - len)).join("\t")}\u001B[32mDone\u001B[0m\n`, "setup");
+                    (_c = System.display) === null || _c === void 0 ? void 0 : _c.input(`\u001B[32mDone\u001B[0m\n`, "setup");
             }
             else {
                 console.log(e);
             }
         }
-        system.fileSystem.write("/etc/version_hash", `${hash}\n`);
-        console.groupEnd();
+        system.fileSystem.write("/etc/version_hash", `${JSON.stringify(System.rootHash)}\n`);
         if (output) {
             if (!System.isDev) {
-                Display_1.default.instance.input("Complete!!!", "setup");
+                (_d = System.display) === null || _d === void 0 ? void 0 : _d.input("Complete!!!", "setup");
                 await (new Promise(res => window.setTimeout(() => res(0), 1000)));
             }
-            Display_1.default.instance.input("\u001B[J", "setup");
+            (_f = System.display) === null || _f === void 0 ? void 0 : _f.input("\u001B[J", "setup");
         }
     }
     static get isDev() {
         return location.hostname == "127.0.0.1";
     }
     static async boot() {
+        if (System.isDev)
+            System.toggleDebug();
+        this.display = Display_1.default;
+        console.group("Boot");
         await FileSystem_1.FileSystem.boot();
         const root = new UserIdent_1.UserIdent("root", ["root"]);
         const rootSysHandle = new SystemHandle(root);
-        document.onkeypress = ev => {
-            System.keyInput(ev.key);
-            return false;
-        };
-        document.onkeydown = ev => {
-            switch (ev.key) {
-                case "Backspace":
-                case "Tab":
-                case "ArrowUp":
-                case "ArrowDown":
-                case "ArrowLeft":
-                case "ArrowRight":
-                case "Home":
-                case "End":
-                case "Delete":
-                    System.keyInput(ev.key);
-                    return false;
-                case "c":
-                    if (ev.ctrlKey && !ev.altKey && !ev.shiftKey) {
-                        System.keyInput("\u0018");
-                        return false;
-                    }
-                case "a":
-                    if (ev.ctrlKey)
-                        return false;
-                    break;
-                case "d":
-                    if (ev.ctrlKey && ev.altKey) {
-                        System.toggleDebug();
-                        return false;
-                    }
-                case "Alt":
-                case "Shift":
-                case "Control":
-                    break;
-                default:
-                    break;
-            }
-        };
         System.setup(rootSysHandle)
             .then(() => {
+            var _a;
+            console.groupEnd();
             const shell = rootSysHandle.fileSystem.read("/bin/shell");
             const guest = new UserIdent_1.UserIdent("guest", ["guest"]);
             const guestSysHandle = new SystemHandle(guest);
             guestSysHandle.fileSystem.setCwd("~");
-            const proc = System.createProcess(shell, guestSysHandle, ["--motd"], null);
-            Display_1.default.hookOut(proc);
-            System.hookInput(proc);
+            const proc = System.createProcess(shell, guestSysHandle, ["-p", "--motd"], null);
+            (_a = System.display) === null || _a === void 0 ? void 0 : _a.hookOut(proc, "display");
             return proc.run();
         })
             .then(() => {
@@ -1210,17 +1300,10 @@ class System {
             console.log(_e);
         });
     }
-    static hookInput(input) {
-        System.inputHooks.push(input);
-    }
-    static keyInput(ev) {
-        System.inputHooks.forEach(hook => hook.input(ev, "user"));
-    }
 }
 exports.System = System;
 System.processCount = 0;
-System.inputHooks = [];
-System.rootHash = "";
+System.rootHash = {};
 System.debugging = false;
 System._debug = {};
 
