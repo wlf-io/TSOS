@@ -1,27 +1,27 @@
 import { iOutput } from "../interfaces/SystemInterfaces";
-import BaseApp from "./base/base";
+import BaseApp, { AppState } from "./base/base";
 
 export default class watch extends BaseApp {
 
-    private timer: number | null = null;
     private time = 2;
 
-    public start(args: string[]): void {
-        this.timer = window.setInterval(() => {
-            this.watch(args);
-        }, this.time * 1000);
-        this.watch(args);
+    public async start(_args: string[]) {
+        while (this.state == AppState.running) {
+            await this.watch();
+            await (new Promise(res => window.setTimeout(() => res(1), this.time * 1000)));
+        }
+        this.end("");
     }
 
-    private watch(args: string[]) {
+    private async watch() {
+        const proc = this.proc.createProcess("shell", ["-c", ...this.rawArgs]);
+        proc.hookOut(this, "watch");
         this.output("\u001B[J");
-        this.output(args);
-        console.log(args);
+        await proc.run();
     }
 
-    public end(output: iOutput = "") {
-        if (this.timer == null) return;
-        window.clearInterval(this.timer);
-        super.end(output);
+    passInput(input: iOutput, ident: string) {
+        if (ident != "watch") return;
+        this.output(input);
     }
 }

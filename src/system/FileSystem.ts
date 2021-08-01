@@ -1,10 +1,10 @@
 import { iFAccess, iFileSystem, iUserIdent } from "../interfaces/SystemInterfaces";
 import { FPath, FSAccess, FSType } from "./filesystem/FSModels";
 import PathResolver from "./filesystem/PathResolver";
-import { System } from "./System";
 
 const _setItem = Storage.prototype.setItem;
 const _getItem = Storage.prototype.getItem;
+//@ts-ignore
 const _removeItem = Storage.prototype.removeItem;
 Storage.prototype.setItem = (_key: string, _value: string) => {
     throw "Blocked";
@@ -16,20 +16,25 @@ Storage.prototype.removeItem = (_key: string) => {
     throw "Blocked";
 };
 
-const _cache: { [k: string]: string } = {};
-let _cachePending: string[] = [];
+type FSTypeKey = "P" | "T" | "D";
+type FSCache = { [k: string]: { P: string, T: string, D?: string } };
 
-const setItem = (key: string, value: string) => {
-    _cache[key] = value;
-    _cachePending.push(key);
-    _cachePending = [...(new Set(_cachePending))];
+
+const _cache: FSCache = {};
+
+const setItem = (key: string, type: FSTypeKey, value: string) => {
+    console.log("Write", key, type, value);
+    if (!_cache.hasOwnProperty(key)) _cache[key] = { P: "", T: "" };
+    _cache[key][type] = value;
     queueWrite();
 }
 
 const loadCache = () => {
-    Object.keys(window.localStorage).forEach(k => {
-        _cache[k] = _getItem.apply(window.localStorage, [k]) || "";
-    });
+    Object.keys(_cache).forEach(k => delete _cache[k]);
+    const store: FSCache = JSON.parse(
+        _getItem.apply(window.localStorage, ["FS"]) || "{}"
+    );
+    Object.entries(store).forEach(e => _cache[e[0]] = e[1]);
 }
 
 const getKeys = (): string[] => {
@@ -37,70 +42,40 @@ const getKeys = (): string[] => {
 }
 
 let writeTick: number | null = null;
-let writeStart: number = 0;
 const queueWrite = () => {
-    if (writeTick !== null) return;
-    if (writeStart == 0) {
-        System.debug("Disk Write Pending", _cachePending.length);
-        System.debug("Disk Write Done", null);
-        System.debug("Disk Write Time", null);
-        writeStart = performance.now();
+    if (writeTick !== null) {
+        window.clearTimeout(writeTick);
+        writeTick = null;
     }
     writeTick = window.setTimeout(() => {
-        if (_cachePending.length > 0) {
-            const key = _cachePending.shift();
-            if (key) {
-                if (_cache.hasOwnProperty(key)) {
-                    _setItem.apply(window.localStorage, [key, _cache[key]]);
-                }
-            }
-        }
+        _setItem.apply(window.localStorage, ["FS", JSON.stringify(_cache)]);
         writeTick = null;
-        System.debug("Disk Write Pending", _cachePending.length);
-        if (_cachePending.length > 0) {
-            queueWrite();
-        } else {
-            writeStart = 0;
-            System.debug("Disk Write Done", (new Date()).toTimeString());
-            System.debug("Disk Write Time", performance.now() - writeStart);
-            window.setTimeout(() => {
-                System.debug("Disk Write Pending", null);
-                System.debug("Disk Write Done", null);
-                System.debug("Disk Write Time", null);
-            }, 10000);
-        }
-    }, 50);
+    }, 5000);
 }
 
 const forceSaveCache = () => {
     if (writeTick != null) {
         window.clearTimeout(writeTick);
+        writeTick = null;
     }
-    _cachePending.forEach(key => {
-        if (_cache.hasOwnProperty(key)) {
-            _setItem.apply(window.localStorage, [key, _cache[key]]);
-        }
-    });
-    console.log(`Wrote ${_cachePending.length} keys`);
+    _setItem.apply(window.localStorage, ["FS", JSON.stringify(_cache)]);
+    console.log(`FS SAVED`);
 };
 
 
-const getItem = (key: string): string | null => {
-    // if (!_cache.hasOwnProperty(key)) {
-    //     const get = _getItem.apply(window.localStorage, [key]);
-    //     if (get != null) _cache[key] = get;
-    // }
-    return _cache[key] || null;
+const getItem = (key: string, type: FSTypeKey): string | null => {
+    return (_cache[key] || {})[type] || null;
 }
 
 const removeItem = (key: string) => {
     if (_cache.hasOwnProperty(key)) {
+        getKeys()
+            .filter(k => k.startsWith(key + "/"))
+            .forEach(k => removeItem(k));
+        _cache[`!${key}`] = JSON.parse(JSON.stringify(_cache[key]));
         delete _cache[key];
     }
-    _removeItem.apply(window.localStorage, [key]);
-    getKeys()
-        .filter(k => k.startsWith(key + "/"))
-        .forEach(k => removeItem(k));
+
 }
 
 export class FileSystemHandle implements iFileSystem {
@@ -355,11 +330,11 @@ export class FileSystem {
     }
 
     private setType(path: FPath, type: FSType): void {
-        setItem("FS:T:" + path.path, type);
+        setItem(path.path, "T", type);
     }
 
     public setPerm(path: FPath, perm: FSAccess): void {
-        setItem("FS:P:" + path.path, perm.toString());
+        setItem(path.path, "P", perm.toString());
     }
 
     public isType(path: FPath, type: FSType): boolean {
@@ -367,15 +342,15 @@ export class FileSystem {
     }
 
     public getType(path: FPath): FSType | null {
-        const t: string = getItem("FS:T:" + path.path) || "";
+        const t: string = getItem(path.path, "T") || "";
         return FSType[t as keyof typeof FSType] || null;
     }
 
     public read(path: FPath): string | null {
         const t = this.getType(path);
-        let v = getItem("FS:D:" + path.path);
+        let v = getItem(path.path, "D");
         if (t == FSType.link) {
-            v = getItem("FS:D:" + v);
+            v = getItem(v + "", "D");
         }
         return v;
     }
@@ -384,9 +359,9 @@ export class FileSystem {
         const t = this.getType(path);
         let p = path.path;
         if (t == FSType.link) {
-            p = getItem("FS:D:" + p) || p;
+            p = getItem(p, "D") || p;
         }
-        setItem("FS:D:" + p, data);
+        setItem(p, "D", data);
         const perm = this.getPerm(path);
         perm.modifyTime = (Date.now() / 1000 | 0);
         this.setPerm(path, perm);
@@ -395,14 +370,7 @@ export class FileSystem {
     public delete(path: FPath): void {
         const t = this.getType(path);
         if (t !== null) {
-            setItem(`!FS:T:${path.path}`, t);
-            removeItem(`FS:T:${path.path}`);
-            if (t == FSType.file) {
-                setItem(`!FS:D:${path.path}`, this.read(path) || "");
-                removeItem(`FS:D:${path.path}`);
-            }
-            setItem(`!FS:P:${path.path}`, this.getPerm(path).toString());
-            removeItem(`FS:P:${path.path}`);
+            removeItem(path.path);
         }
     }
 
@@ -432,7 +400,7 @@ export class FileSystem {
     }
 
     public getPerm(path: FPath): FSAccess {
-        const str = getItem("FS:P:" + path.path) || "";
+        const str = getItem(path.path, "P") || "";
         const perm = FSAccess.fromAccessString(str);
         if (perm.accessUndefined) {
             this.setPerm(path, perm);
@@ -440,17 +408,18 @@ export class FileSystem {
         return perm;
     }
 
-    public list(path: FPath, deleted: boolean = false): string[] {
+    public list(path: FPath, _deleted: boolean = false): string[] {
         return getKeys()
-            .filter(key => key.startsWith("FS:T:") || (deleted ? key.startsWith("!FS:T:") : false))
-            .map(key => key.substr(5))
+            // Filter out any path that does start with out key + "/" to ensue sub items and not just items with longer names
             .filter(key => key.startsWith(path.path + (path.path == "/" ? "" : "/")) && key.length > path.path.length)
+            // Filter out any paths that have further / in them, to only list one depth.
             .filter(key => !key.substr(path.path.length + (path.path == "/" ? 0 : 1)).includes("/"));
     }
 
     public static async boot() {
 
         const permRoot = new FSAccess("755", "root", "root");
+        loadCache();
 
         (new FileSystem()).mkdir(new FPath("/", "/", "root"), permRoot);
         (new FileSystem()).mkdir(new FPath("/bin", "/", "root"), permRoot);
@@ -463,7 +432,6 @@ export class FileSystem {
         (new FileSystem()).mkdir(new FPath("/usr", "/", "root"), permRoot);
         (new FileSystem()).mkdir(new FPath("/usr/bin", "/", "root"), permRoot);
 
-        loadCache();
         window.onbeforeunload = () => {
             forceSaveCache();
         };

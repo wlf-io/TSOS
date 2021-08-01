@@ -226,7 +226,9 @@ export default class shell extends BaseApp {
             await this.runInput(input, undefined, "script: " + this.script);
             this.endOutput("");
         } else if (this.command) {
-
+            console.log("SHELL COMMAND", args.join(" "));
+            await this.runInput(args.join(" "), undefined, "command: " + args.join(" "));
+            this.endOutput("");
         } else if (this.motd) {
             try {
                 if (this.system.fileSystem.exists("/etc/shell/motd")) {

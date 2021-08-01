@@ -24,6 +24,17 @@ const fixBins = (bin, path) => {
 };
 
 
+const getBinEntries = async() => {
+    const children = await readdir(path.resolve(__dirname, "src/bin"), { withFileTypes: true });
+    const entries = {};
+    for (const child of children) {
+        if (child.isDirectory()) continue;
+        const p = path.resolve(__dirname, "src/bin", child.name);
+        entries[child.name.split(".ts").shift()] = p;
+    }
+    return entries;
+}
+
 const config = {
     module: {
         rules: [{
@@ -59,36 +70,7 @@ module.exports = env => {
             devtool: env.map ? "source-map" : undefined,
         }),
         Object.assign({}, config, {
-            entry: {
-                shell: './src/bin/shell.ts',
-                ls: './src/bin/ls.ts',
-                mkdir: './src/bin/mkdir.ts',
-                rm: './src/bin/rm.ts',
-                cd: './src/bin/cd.ts',
-                touch: './src/bin/touch.ts',
-                cat: './src/bin/cat.ts',
-                pwd: './src/bin/pwd.ts',
-                hostname: './src/bin/hostname.ts',
-                echo: './src/bin/echo.ts',
-                chmod: './src/bin/chmod.ts',
-                chown: './src/bin/chown.ts',
-                tail: './src/bin/tail.ts',
-                head: './src/bin/head.ts',
-                clear: './src/bin/clear.ts',
-                sleep: './src/bin/sleep.ts',
-                printenv: './src/bin/printenv.ts',
-                setenv: './src/bin/setenv.ts',
-                remenv: './src/bin/remenv.ts',
-                args: './src/bin/args.ts',
-                pid: './src/bin/pid.ts',
-                exit: './src/bin/exit.ts',
-                watch: './src/bin/watch.ts',
-                write: './src/bin/write.ts',
-                ping: './src/bin/ping.ts',
-                cp: './src/bin/cp.ts',
-                mv: './src/bin/mv.ts',
-                conway: './src/bin/conway.ts',
-            },
+            entry: getBinEntries,
             output: {
                 filename: "[name].js",
                 path: path.resolve(__dirname, "dist/root/bin"),

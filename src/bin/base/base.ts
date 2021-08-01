@@ -10,7 +10,7 @@ export default abstract class BaseApp implements iProcessInstance {
 
     private outHooks: [IOFeed, string | null][] = [];
 
-    private state: AppState = AppState.new;
+    protected state: AppState = AppState.new;
 
     protected rawArgs: string[] = [];
 
@@ -147,12 +147,12 @@ export default abstract class BaseApp implements iProcessInstance {
     }
 
     private outputHelp() {
-        this.endOutput(this.helpText);
+        this.endOutput(this.helpText + "\n");
     }
 
 }
 
-enum AppState {
+export enum AppState {
     new = "new",
     running = "running",
     killed = "killed",
