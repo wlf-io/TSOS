@@ -500,7 +500,6 @@ Storage.prototype.removeItem = (_key) => {
 };
 const _cache = {};
 const setItem = (key, type, value) => {
-    console.log("Write", key, type, value);
     if (!_cache.hasOwnProperty(key))
         _cache[key] = { P: "", T: "" };
     _cache[key][type] = value;
@@ -531,7 +530,6 @@ const forceSaveCache = () => {
         writeTick = null;
     }
     _setItem.apply(window.localStorage, ["FS", JSON.stringify(_cache)]);
-    console.log(`FS SAVED`);
 };
 const getItem = (key, type) => {
     return (_cache[key] || {})[type] || null;
