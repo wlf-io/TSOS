@@ -23,7 +23,6 @@ type FSCache = { [k: string]: { P: string, T: string, D?: string } };
 const _cache: FSCache = {};
 
 const setItem = (key: string, type: FSTypeKey, value: string) => {
-    console.log("Write", key, type, value);
     if (!_cache.hasOwnProperty(key)) _cache[key] = { P: "", T: "" };
     _cache[key][type] = value;
     queueWrite();
@@ -59,7 +58,6 @@ const forceSaveCache = () => {
         writeTick = null;
     }
     _setItem.apply(window.localStorage, ["FS", JSON.stringify(_cache)]);
-    console.log(`FS SAVED`);
 };
 
 

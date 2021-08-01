@@ -233,7 +233,7 @@ export default class shell extends BaseApp {
             try {
                 if (this.system.fileSystem.exists("/etc/shell/motd")) {
                     // console.log("MOTD");
-                    await this.runInput(this.system.fileSystem.read("/etc/shell/motd"));
+                    await this.runInput(this.system.fileSystem.read("/etc/shell/motd"), undefined, "motd");
                 }
             } catch (e) {
 
