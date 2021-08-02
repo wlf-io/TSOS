@@ -13,6 +13,16 @@ export default class ShellLexer {
         this.stream = stream;
     }
 
+    public getAll(): ShellToken[] {
+        this.rewind();
+        const tokens: ShellToken[] = [];
+        while (!this.eof()) {
+            const next = this.next();
+            if (next) tokens.push(next);
+        }
+        return tokens;
+    }
+
     private isWhitespace(ch: string, nl: boolean = true): boolean {
         return ((nl ? "\n" : "") + " \r\t").indexOf(ch) >= 0;
     }

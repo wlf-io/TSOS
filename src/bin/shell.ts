@@ -2,6 +2,7 @@ import { iOutput, iProcess } from "../interfaces/SystemInterfaces";
 import { default as E } from "../shared/EscapeCodes";
 import LexerStream from "../shared/LexerStream";
 import BaseApp from "./base/base";
+import ShellCompleter from "./shell/ShellCompleter";
 import ShellRunner from "./shell/ShellRunner";
 
 export default class shell extends BaseApp {
@@ -121,7 +122,22 @@ export default class shell extends BaseApp {
                     }
                     break;
                 case "Tab":
-                    console.log("TODO : auto-complete")
+                    if (this.column == this.inputStr.length) {
+                        const completer = new ShellCompleter(this.inputStr, this.proc);
+                        completer.predict()
+                            .then(result => {
+                                if (result.predictions.length > 1) {
+                                    this.output("\n" + result.predictions.join("\t") + "\n");
+                                    this.prompt().then(() => {
+                                        this.output(this.inputStr);
+                                    });
+                                } else {
+                                    this.addToInput(result.predictions[0]);
+                                }
+                            }).catch(_e => {
+                                this.output(E.BELL);
+                            });
+                    }
                     break;
                 case "Backspace":
                     if (this.inputStr.length > 0 && this.column > 0) {

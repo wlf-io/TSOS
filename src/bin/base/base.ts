@@ -128,7 +128,6 @@ export default abstract class BaseApp implements iProcessInstance {
                 });
             }
         });
-        console.log("help?", this.helpOutput);
         return remaining;
     }
 
