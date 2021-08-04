@@ -77,12 +77,12 @@ export default abstract class BaseApp implements iProcessInstance {
         // console.log(`Running: ${this.constructor.name}[${this.proc.pid}]`);
         this.state = AppState.running;
         this.rawArgs = [...args];
-        args = this.processArgFlags(args);
         window.setTimeout(() => this.runProcess(args), 0);
         return this.endPromise.promise;
     }
 
     protected runProcess(args: string[]) {
+        args = this.processArgFlags(args);
         if (this.helpOutput) {
             this.outputHelp();
             return;

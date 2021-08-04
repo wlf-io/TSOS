@@ -1,19 +1,5 @@
-import { iFAccess, iUserIdent } from "../../interfaces/SystemInterfaces";
+import { FSPerm, iFAccess, iFileSystemPath, iUserIdent } from "../../interfaces/SystemInterfaces";
 import PathResolver from "./PathResolver";
-
-export enum FSPerm {
-    execute = 1,
-    write = 2,
-    read = 4,
-}
-
-export enum FSType {
-    file = "file",
-    dir = "dir",
-    in = "in",
-    out = "out",
-    link = "link"
-}
 
 export class FSAccess implements iFAccess {
     private _owner: string;
@@ -146,7 +132,7 @@ export class FSAccess implements iFAccess {
     }
 }
 
-export class FPath {
+export class FPath implements iFileSystemPath {
     private _path: string;
     private _parent: FPath | null = null;
     private cwd: string;

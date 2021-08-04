@@ -22,13 +22,13 @@ export default class conway extends BaseApp {
         ` Usage: conway [options]...
  An implementation of conways game of life with immigrant feature
 
-\t-g=#\t\t\tset grid size x and y
-\t-x=#\t\t\tset grid size x
-\t-y=#\t\t\tset grid size y
+\t-g #\t\t\tset grid size x and y
+\t-x #\t\t\tset grid size x
+\t-y #\t\t\tset grid size y
 \t-d=path\t\tload specified datafile as starting state
-\t-f=#\t--frams=#\trun simulation for specified ammount of frames ( default 100 )
-\t-s=#\t--speed=#\tset time to sleep between frames in ms ( speed ) ( default 10 )
-\t-t=#\t\t\tset team count
+\t-f #\t--frames #\trun simulation for specified ammount of frames ( default 100 )
+\t-s #\t--speed=#\tset time to sleep between frames in ms ( speed ) ( default 10 )
+\t-t #\t\t\tset team count
 \t-r\t\t\trandomize starting state`;
 
     protected handleFlag(flag: string, arg: string): boolean {

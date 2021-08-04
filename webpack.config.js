@@ -35,6 +35,21 @@ const getBinEntries = async() => {
     return entries;
 }
 
+const getDirEntriesFunc = (dir) => {
+    const func = async() => {
+        const children = await readdir(path.resolve(__dirname, dir), { withFileTypes: true });
+        const entries = {};
+        for (const child of children) {
+            if (child.isDirectory()) continue;
+            if (!child.name.endsWith(".ts")) continue;
+            const p = path.resolve(__dirname, dir, child.name);
+            entries[child.name.split(".ts").shift()] = p;
+        }
+        return entries;
+    };
+    return func;
+}
+
 const config = {
     module: {
         rules: [{
@@ -70,7 +85,18 @@ module.exports = env => {
             devtool: env.map ? "source-map" : undefined,
         }),
         Object.assign({}, config, {
-            entry: getBinEntries,
+            entry: getDirEntriesFunc("src/lib"),
+            output: {
+                filename: "[name].js",
+                path: path.resolve(__dirname, "dist/root/lib"),
+            },
+            optimization: {
+                minimize: false,
+            },
+            devtool: env.map ? "source-map" : undefined,
+        }),
+        Object.assign({}, config, {
+            entry: getDirEntriesFunc("src/bin"),
             output: {
                 filename: "[name].js",
                 path: path.resolve(__dirname, "dist/root/bin"),

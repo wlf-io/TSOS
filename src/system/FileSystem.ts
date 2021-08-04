@@ -1,5 +1,5 @@
-import { iFAccess, iFileSystem, iUserIdent } from "../interfaces/SystemInterfaces";
-import { FPath, FSAccess, FSType } from "./filesystem/FSModels";
+import { iFAccess, iFileSystem, iUserIdent, FSType } from "../interfaces/SystemInterfaces";
+import { FPath, FSAccess } from "./filesystem/FSModels";
 import PathResolver from "./filesystem/PathResolver";
 import { System } from "./System";
 

@@ -35,6 +35,21 @@ export interface iFAccess {
     setPerm(perm: string): void;
 }
 
+export interface iFileSystemPath {
+    parent: iFileSystemPath;
+    path: string;
+    isRoot: boolean;
+    toString(): string;
+    parentList: iFileSystemPath[];
+}
+
+export interface iFile {
+    access: iFAccess;
+    type: FSType;
+    path: iFileSystemPath;
+    content: string;
+}
+
 export interface iFileSystem {
     read(path: string): string;
     write(path: string, data: string): void;
@@ -84,4 +99,18 @@ export interface iProcessInstance extends IOFeed {
     //new(process: iProcess): iProcessInstance;
     run(args: string[]): Promise<iOutput>;
     kill(): void;
+}
+
+export enum FSPerm {
+    execute = 1,
+    write = 2,
+    read = 4,
+}
+
+export enum FSType {
+    file = "file",
+    dir = "dir",
+    in = "in",
+    out = "out",
+    link = "link"
 }
