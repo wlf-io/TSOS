@@ -2,6 +2,30 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
+/***/ 625:
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FSType = exports.FSPerm = void 0;
+var FSPerm;
+(function (FSPerm) {
+    FSPerm[FSPerm["execute"] = 1] = "execute";
+    FSPerm[FSPerm["write"] = 2] = "write";
+    FSPerm[FSPerm["read"] = 4] = "read";
+})(FSPerm = exports.FSPerm || (exports.FSPerm = {}));
+var FSType;
+(function (FSType) {
+    FSType["file"] = "file";
+    FSType["dir"] = "dir";
+    FSType["in"] = "in";
+    FSType["out"] = "out";
+    FSType["link"] = "link";
+})(FSType = exports.FSType || (exports.FSType = {}));
+
+
+/***/ }),
+
 /***/ 497:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -574,6 +598,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.FileSystem = exports.FileSystemHandle = void 0;
+const SystemInterfaces_1 = __webpack_require__(625);
 const FSModels_1 = __webpack_require__(958);
 const PathResolver_1 = __importDefault(__webpack_require__(268));
 const System_1 = __webpack_require__(978);
@@ -785,7 +810,7 @@ class FileSystemHandle {
     }
     exists(path) {
         path = this.ensureFPath(path);
-        if (!this.fs.isType(path.parent, FSModels_1.FSType.dir)) {
+        if (!this.fs.isType(path.parent, SystemInterfaces_1.FSType.dir)) {
             console.log("EXISTS PARENT NOT DIR");
             return false;
         }
@@ -798,7 +823,7 @@ class FileSystemHandle {
     }
     isDir(path) {
         path = this.ensureFPath(path);
-        return this.isType(path, FSModels_1.FSType.dir);
+        return this.isType(path, SystemInterfaces_1.FSType.dir);
     }
     ensureFPath(path) {
         if (typeof path === "string")
@@ -807,7 +832,7 @@ class FileSystemHandle {
     }
     isFile(path) {
         path = this.ensureFPath(path);
-        return this.isType(path, FSModels_1.FSType.file);
+        return this.isType(path, SystemInterfaces_1.FSType.file);
     }
     isType(path, type) {
         if (!this.exists(path))
@@ -865,11 +890,11 @@ class FileSystemHandle {
 exports.FileSystemHandle = FileSystemHandle;
 class FileSystem {
     mkdir(path, perm) {
-        this.setType(path, FSModels_1.FSType.dir);
+        this.setType(path, SystemInterfaces_1.FSType.dir);
         this.setPerm(path, perm);
     }
     touch(path, perm, data) {
-        this.setType(path, FSModels_1.FSType.file);
+        this.setType(path, SystemInterfaces_1.FSType.file);
         this.setPerm(path, perm);
         this.write(path, data || "");
     }
@@ -884,12 +909,12 @@ class FileSystem {
     }
     getType(path) {
         const t = getItem(path.path, "T") || "";
-        return FSModels_1.FSType[t] || null;
+        return SystemInterfaces_1.FSType[t] || null;
     }
     read(path) {
         const t = this.getType(path);
         let v = getItem(path.path, "D");
-        if (t == FSModels_1.FSType.link) {
+        if (t == SystemInterfaces_1.FSType.link) {
             v = getItem(v + "", "D");
         }
         return v;
@@ -897,7 +922,7 @@ class FileSystem {
     write(path, data) {
         const t = this.getType(path);
         let p = path.path;
-        if (t == FSModels_1.FSType.link) {
+        if (t == SystemInterfaces_1.FSType.link) {
             p = getItem(p, "D") || p;
         }
         setItem(p, "D", data);
@@ -925,11 +950,11 @@ class FileSystem {
         const perm = this.getPerm(from);
         perm.setOwner(user);
         perm.setGroup(user);
-        if (type == FSModels_1.FSType.file || type == FSModels_1.FSType.link) {
+        if (type == SystemInterfaces_1.FSType.file || type == SystemInterfaces_1.FSType.link) {
             const data = this.read(from);
             this.touch(to, perm, data || "");
         }
-        else if (type == FSModels_1.FSType.dir) {
+        else if (type == SystemInterfaces_1.FSType.dir) {
             this.mkdir(to, perm);
         }
     }
@@ -1457,22 +1482,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.FPath = exports.FSAccess = exports.FSType = exports.FSPerm = void 0;
+exports.FPath = exports.FSAccess = void 0;
+const SystemInterfaces_1 = __webpack_require__(625);
 const PathResolver_1 = __importDefault(__webpack_require__(268));
-var FSPerm;
-(function (FSPerm) {
-    FSPerm[FSPerm["execute"] = 1] = "execute";
-    FSPerm[FSPerm["write"] = 2] = "write";
-    FSPerm[FSPerm["read"] = 4] = "read";
-})(FSPerm = exports.FSPerm || (exports.FSPerm = {}));
-var FSType;
-(function (FSType) {
-    FSType["file"] = "file";
-    FSType["dir"] = "dir";
-    FSType["in"] = "in";
-    FSType["out"] = "out";
-    FSType["link"] = "link";
-})(FSType = exports.FSType || (exports.FSType = {}));
 class FSAccess {
     constructor(perm, owner, group, accessTime, modifyTime, changeTime, createTime) {
         this.perms = {
@@ -1503,9 +1515,9 @@ class FSAccess {
     }
     permToLongString(perm) {
         return [
-            this.permTest(perm, FSPerm.read) ? "r" : "-",
-            this.permTest(perm, FSPerm.write) ? "w" : "-",
-            this.permTest(perm, FSPerm.execute) ? "x" : "-",
+            this.permTest(perm, SystemInterfaces_1.FSPerm.read) ? "r" : "-",
+            this.permTest(perm, SystemInterfaces_1.FSPerm.write) ? "w" : "-",
+            this.permTest(perm, SystemInterfaces_1.FSPerm.execute) ? "x" : "-",
         ].join("");
     }
     static fromAccessString(str) {
@@ -1548,13 +1560,13 @@ class FSAccess {
         return "other";
     }
     canRead(user) {
-        return this.userHasPerm(user, FSPerm.read);
+        return this.userHasPerm(user, SystemInterfaces_1.FSPerm.read);
     }
     canWrite(user) {
-        return this.userHasPerm(user, FSPerm.write);
+        return this.userHasPerm(user, SystemInterfaces_1.FSPerm.write);
     }
     canExecute(user) {
-        return this.userHasPerm(user, FSPerm.execute);
+        return this.userHasPerm(user, SystemInterfaces_1.FSPerm.execute);
     }
     userHasPerm(user, perm) {
         switch (this.getUserLevel(user)) {
