@@ -84,17 +84,17 @@ module.exports = env => {
             },
             devtool: env.map ? "source-map" : undefined,
         }),
-        Object.assign({}, config, {
-            entry: getDirEntriesFunc("src/lib"),
-            output: {
-                filename: "[name].js",
-                path: path.resolve(__dirname, "dist/root/lib"),
-            },
-            optimization: {
-                minimize: false,
-            },
-            devtool: env.map ? "source-map" : undefined,
-        }),
+        // Object.assign({}, config, {
+        //     entry: getDirEntriesFunc("src/lib"),
+        //     output: {
+        //         filename: "[name].js",
+        //         path: path.resolve(__dirname, "dist/root/lib"),
+        //     },
+        //     optimization: {
+        //         minimize: false,
+        //     },
+        //     devtool: env.map ? "source-map" : undefined,
+        // }),
         Object.assign({}, config, {
             entry: getDirEntriesFunc("src/bin"),
             output: {
