@@ -114,12 +114,18 @@ export class FileSystemHandle implements iFileSystem {
     public append(path: string | FPath, data: string) {
         path = this.ensureFPath(path);
         this.writeCheck(path);
+        if (!this.exists(path)) {
+            this.touch(path);
+        }
         this.fs.append(path, data);
     }
 
     public prepend(path: string | FPath, data: string) {
         path = this.ensureFPath(path);
         this.writeCheck(path);
+        if (!this.exists(path)) {
+            this.touch(path);
+        }
         this.fs.prepend(path, data);
     }
 
