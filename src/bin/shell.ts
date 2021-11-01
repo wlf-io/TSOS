@@ -107,16 +107,17 @@ export default class shell extends BaseApp {
                     this.output("\n");
                     if (this.inputStr.length) {
                         this.historyIndex = -1;
-                        if (!this.inputStr.startsWith(" ")) {
-                            this.system.fileSystem.append("~/.shell_history", this.inputStr + "\n");
-                        }
                         this.runInput(this.inputStr)
+                            .then(() => {
+                                if (!this.inputStr.startsWith(" ")) {
+                                    this.system.fileSystem.append("~/.shell_history", this.inputStr + "\n");
+                                }
+                            })
                             .then(() => {
                                 this.inputStr = "";
                                 this.column = 0;
                                 this.prompt();
                             });
-
                     } else {
                         this.prompt();
                     }
