@@ -693,11 +693,17 @@ class FileSystemHandle {
     append(path, data) {
         path = this.ensureFPath(path);
         this.writeCheck(path);
+        if (!this.exists(path)) {
+            this.touch(path);
+        }
         this.fs.append(path, data);
     }
     prepend(path, data) {
         path = this.ensureFPath(path);
         this.writeCheck(path);
+        if (!this.exists(path)) {
+            this.touch(path);
+        }
         this.fs.prepend(path, data);
     }
     mkdir(path) {
